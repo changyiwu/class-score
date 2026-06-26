@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>班級加減分系統</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- CSS Style -->
+    <link rel="stylesheet" href="style.css">
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- QR Code Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+</head>
+<body>
+    <!-- Background Elements -->
+    <div class="bg-glow bg-glow-1"></div>
+    <div class="bg-glow bg-glow-2"></div>
+
+    <!-- MAIN APP CONTAINER -->
+    <div id="app" class="app-container hidden">
+        
+        <!-- ==================== BIG SCREEN / DESKTOP VIEW ==================== -->
+        <div id="desktop-view" class="view-panel hidden">
+            <!-- HEADER -->
+            <header class="app-header">
+                <div class="header-left">
+                    <div class="logo">
+                        <i class="fa-solid fa-graduation-cap logo-icon"></i>
+                        <span class="logo-text">課堂加減分系統</span>
+                    </div>
+                </div>
+                
+                <!-- CLASS TABS -->
+                <div class="header-center">
+                    <div id="class-tabs" class="tabs-container">
+                        <!-- Loaded dynamically: Tab buttons for Class 1, Class 2, etc. -->
+                    </div>
+                </div>
+                
+                <div class="header-right">
+                    <div id="timer-display" class="timer-badge">
+                        <i class="fa-solid fa-clock"></i>
+                        <span id="timer-text">剩餘 45:00</span>
+                    </div>
+                    <button id="logout-btn" class="btn btn-secondary logout-btn">
+                        <i class="fa-solid fa-right-from-bracket"></i> 登出
+                    </button>
+                </div>
+            </header>
+
+            <!-- MAIN CONTENT AREA -->
+            <main class="app-main">
+                <!-- LOADING INDICATOR -->
+                <div id="main-loading" class="loading-overlay hidden">
+                    <div class="spinner"></div>
+                    <p>載入中，請稍候...</p>
+                </div>
+
+                <!-- DASHBOARD: CLASS STUDENT GRID -->
+                <section id="class-dashboard" class="dashboard-panel">
+                    <div class="class-info-header">
+                        <h2 id="current-class-name">讀取中...</h2>
+                        <div class="class-stats">
+                            <span class="stat-badge"><i class="fa-solid fa-users"></i> 學生人數: <span id="stat-student-count">0</span> 人</span>
+                        </div>
+                    </div>
+                    <div id="student-grid" class="student-grid">
+                        <!-- Dynamic Student Cards -->
+                    </div>
+                </section>
+
+                <!-- FORM: CREATE NEW CLASS -->
+                <section id="new-class-panel" class="new-class-panel hidden">
+                    <div class="card form-card">
+                        <div class="card-header">
+                            <h2><i class="fa-solid fa-folder-plus"></i> 設定新班級</h2>
+                            <p>請輸入班級名稱與學生人數，並設定缺席/空缺的座號</p>
+                        </div>
+                        <form id="create-class-form" onsubmit="return false;">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="input-class-name">班級名稱</label>
+                                    <input type="text" id="input-class-name" placeholder="例如：3年2班、英語A班" required maxlength="15">
+                                </div>
+                                <div class="form-group">
+                                    <label for="input-student-count">預估學生人數 (最大座號)</label>
+                                    <input type="number" id="input-student-count" min="5" max="50" value="30" required>
+                                </div>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>點擊勾選空缺/不存在的座號 (在大螢幕不顯示)</label>
+                                <div id="vacant-seats-grid" class="vacant-grid">
+                                    <!-- Populated dynamically via JS from 1 to total student count -->
+                                </div>
+                            </div>
+                            
+                            <div class="form-actions">
+                                <button type="button" id="btn-cancel-create" class="btn btn-secondary">取消</button>
+                                <button type="submit" id="btn-submit-class" class="btn btn-primary">
+                                    <i class="fa-solid fa-check"></i> 建立班級並寫入試算表
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </section>
+            </main>
+        </div>
+
+        <!-- ==================== DESKTOP LOGIN / QR CODE SCREEN ==================== -->
+        <div id="desktop-login-view" class="view-panel login-screen hidden">
+            <div class="login-card">
+                <div class="login-header">
+                    <div class="login-logo">
+                        <i class="fa-solid fa-graduation-cap"></i>
+                    </div>
+                    <h1>班級加減分系統</h1>
+                    <p class="subtitle">課堂大螢幕端</p>
+                </div>
+                
+                <div class="qr-container">
+                    <div id="qrcode-box" class="qrcode-box">
+                        <!-- QR Code will render here -->
+                    </div>
+                    <div class="qr-status-indicator">
+                        <div class="pulse-dot"></div>
+                        <span id="qr-status-text">等待手機掃描登入中...</span>
+                    </div>
+                </div>
+                
+                <div class="login-instructions">
+                    <h3><i class="fa-solid fa-mobile-screen-button"></i> 教師登入步驟：</h3>
+                    <ol>
+                        <li>請用手機相機或 LINE 掃描上方 QR Code</li>
+                        <li>在手機上輸入系統管理密碼進行授權</li>
+                        <li>大螢幕會自動解鎖並載入班級資料</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== MOBILE LOGIN SCREEN ==================== -->
+        <div id="mobile-login-view" class="view-panel mobile-screen hidden">
+            <div class="mobile-card">
+                <div class="mobile-header">
+                    <div class="mobile-logo">
+                        <i class="fa-solid fa-shield-halved"></i>
+                    </div>
+                    <h2>班級系統授權登入</h2>
+                    <p>請輸入管理密碼，授權大螢幕開啟系統</p>
+                </div>
+                
+                <div id="mobile-login-form-container">
+                    <form id="mobile-login-form" onsubmit="return false;">
+                        <div class="form-group">
+                            <label for="mobile-password"><i class="fa-solid fa-lock"></i> 管理密碼</label>
+                            <input type="password" id="mobile-password" placeholder="請輸入密碼" required autocomplete="current-password">
+                        </div>
+                        
+                        <div id="login-error-msg" class="alert alert-danger hidden">
+                            <i class="fa-solid fa-circle-exclamation"></i> <span>密碼錯誤</span>
+                        </div>
+                        
+                        <button type="submit" id="btn-mobile-login" class="btn btn-primary btn-block">
+                            <span class="btn-text">確認授權登入</span>
+                            <div class="btn-spinner hidden"></div>
+                        </button>
+                    </form>
+                </div>
+                
+                <div id="mobile-success-container" class="success-panel hidden">
+                    <div class="success-icon animate-success">
+                        <i class="fa-solid fa-circle-check"></i>
+                    </div>
+                    <h3>授權成功！</h3>
+                    <p>大螢幕已完成登入，您可以關閉此手機視窗並開始在大螢幕操作加減分。</p>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>
