@@ -302,6 +302,7 @@ function loadClassData(className) {
                 document.getElementById("current-class-name").innerText = className;
                 document.getElementById("stat-student-count").innerText = state.students.length;
                 renderStudentGrid();
+                updateTopThreeLeaderboard();
             } else {
                 showToast("載入班級資料失敗: " + res.error, "error");
             }
@@ -340,6 +341,9 @@ function changeScore(seatNumber, delta) {
     void scoreWrapper.offsetWidth; // Trigger reflow
     scoreWrapper.classList.add("score-pulse");
     
+    // Update top three display instantly in the optimistic phase
+    updateTopThreeLeaderboard();
+    
     // 2. Send request to backend
     card.classList.add("updating");
     
@@ -355,6 +359,7 @@ function changeScore(seatNumber, delta) {
             // Confirm score from backend
             state.students[studentIdx].score = res.newScore;
             scoreValEl.innerText = res.newScore >= 0 ? `+${res.newScore}` : res.newScore;
+            updateTopThreeLeaderboard();
         } else {
             // Revert on backend error
             state.students[studentIdx].score = oldScore;
@@ -362,6 +367,7 @@ function changeScore(seatNumber, delta) {
             scoreValEl.className = "student-score";
             if (oldScore > 0) scoreValEl.classList.add("positive");
             if (oldScore < 0) scoreValEl.classList.add("negative");
+            updateTopThreeLeaderboard();
             
             showToast("寫入失敗，數值已復原！", "error");
         }
@@ -374,6 +380,7 @@ function changeScore(seatNumber, delta) {
         scoreValEl.className = "student-score";
         if (oldScore > 0) scoreValEl.classList.add("positive");
         if (oldScore < 0) scoreValEl.classList.add("negative");
+        updateTopThreeLeaderboard();
         
         showToast("網路錯誤，更新失敗！", "error");
         console.error(err);
@@ -670,4 +677,35 @@ function clearLocalSession() {
     
     if (state.timerInterval) clearInterval(state.timerInterval);
     if (state.pollInterval) clearInterval(state.pollInterval);
+}
+
+// Calculate and render Top 3 leaderboard
+function updateTopThreeLeaderboard() {
+    const container = document.getElementById("top-three-display");
+    if (!container) return;
+    
+    // Sort students by score descending
+    const sorted = [...state.students].sort((a, b) => b.score - a.score);
+    
+    if (sorted.length === 0) {
+        container.innerHTML = `<span style="font-size:0.85rem;color:var(--text-muted);"><i class="fa-solid fa-trophy"></i> 目前尚無評分數據</span>`;
+        return;
+    }
+    
+    // Get top 3
+    const top3 = sorted.slice(0, 3);
+    const medals = [
+        '<span class="podium-badge gold"><i class="fa-solid fa-medal"></i> ',
+        '<span class="podium-badge silver"><i class="fa-solid fa-medal"></i> ',
+        '<span class="podium-badge bronze"><i class="fa-solid fa-medal"></i> '
+    ];
+    
+    let html = '';
+    top3.forEach((student, idx) => {
+        const displayName = student.name && student.name !== `學生${student.seat}` ? student.name : `座號 ${student.seat}`;
+        let scoreText = student.score >= 0 ? `+${student.score}` : student.score;
+        html += `${medals[idx]}${displayName} (${scoreText}分)</span>`;
+    });
+    
+    container.innerHTML = html;
 }

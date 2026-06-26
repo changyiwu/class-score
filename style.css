@@ -285,6 +285,38 @@ body {
     font-size: 0.9rem;
 }
 
+.top-three-container {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--border-glass);
+    padding: 6px 16px;
+    border-radius: 20px;
+    box-shadow: var(--shadow-sm);
+}
+
+.podium-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-heading);
+    font-weight: 600;
+    font-size: 0.85rem;
+}
+
+.podium-badge.gold {
+    color: #fbbf24;
+}
+
+.podium-badge.silver {
+    color: #cbd5e1;
+}
+
+.podium-badge.bronze {
+    color: #f59e0b;
+}
+
 /* Loading Overlay */
 .loading-overlay {
     position: absolute;
