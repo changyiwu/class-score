@@ -567,9 +567,6 @@ function renderStudentGrid() {
         card.className = "student-card animate-card";
         card.setAttribute("data-seat", student.seat);
         
-        // Seat text padding e.g. "05" instead of "5"
-        const seatFormatted = student.seat.toString().padStart(2, '0');
-        
         let scoreClass = "";
         let scoreText = student.score;
         if (student.score > 0) {
@@ -579,9 +576,13 @@ function renderStudentGrid() {
             scoreClass = "negative";
         }
         
+        // Only display name if it is custom (i.e. not the default "學生X")
+        const isDefaultName = student.name === `學生${student.seat}`;
+        const nameHTML = isDefaultName ? "" : `<div class="student-name">${student.name}</div>`;
+        
         card.innerHTML = `
-            <div class="student-seat">${seatFormatted} 號</div>
-            <div class="student-name">${student.name}</div>
+            <div class="student-seat">座號 ${student.seat}</div>
+            ${nameHTML}
             <div class="student-score-wrapper">
                 <span class="student-score ${scoreClass}">${scoreText}</span>
             </div>
