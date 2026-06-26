@@ -288,21 +288,21 @@ body {
 .top-three-container {
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 20px;
     background: rgba(0, 0, 0, 0.2);
     border: 1px solid var(--border-glass);
-    padding: 8px 20px;
-    border-radius: 24px;
+    padding: 10px 24px;
+    border-radius: 28px;
     box-shadow: var(--shadow-sm);
 }
 
 .podium-badge {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     font-family: var(--font-heading);
     font-weight: 700;
-    font-size: 1.1rem;
+    font-size: 1.35rem;
 }
 
 .podium-badge.gold {
