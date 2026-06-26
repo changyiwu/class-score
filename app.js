@@ -695,8 +695,8 @@ function updateTopThreeLeaderboard() {
     // Get top 3
     const top3 = sorted.slice(0, 3);
     const medals = [
-        '<span class="podium-badge gold"><i class="fa-solid fa-medal"></i> ',
-        '<span class="podium-badge silver"><i class="fa-solid fa-medal"></i> ',
+        '<span class="podium-badge gold"><i class="fa-solid fa-crown"></i> ',
+        '<span class="podium-badge silver"><i class="fa-solid fa-trophy"></i> ',
         '<span class="podium-badge bronze"><i class="fa-solid fa-medal"></i> '
     ];
     
