@@ -1,25 +1,25 @@
 /* ==================== GLOBAL VARIABLES & THEME ==================== */
 :root {
-    --bg-primary: #0b0f19;
-    --bg-secondary: #161f30;
-    --bg-glass: rgba(22, 31, 48, 0.7);
+    --bg-primary: #0a081c;
+    --bg-secondary: #0f172a;
+    --bg-glass: rgba(255, 255, 255, 0.05);
     --border-glass: rgba(255, 255, 255, 0.08);
     
-    --accent-blue: #3b82f6;
+    --accent-blue: #06b6d4;
     --accent-purple: #8b5cf6;
     --accent-green: #10b981;
-    --accent-red: #ef4444;
+    --accent-red: #f43f5e;
     
-    --text-primary: #f3f4f6;
-    --text-secondary: #9ca3af;
-    --text-muted: #6b7280;
+    --text-primary: #f8fafc;
+    --text-secondary: #94a3b8;
+    --text-muted: #64748b;
     
     --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.2);
-    --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
     --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.4);
     
-    --font-heading: 'Outfit', 'Inter', 'Noto Sans TC', sans-serif;
-    --font-body: 'Inter', 'Noto Sans TC', sans-serif;
+    --font-heading: 'Outfit', 'Noto Sans TC', sans-serif;
+    --font-body: 'Outfit', 'Noto Sans TC', sans-serif;
     
     --border-radius-sm: 8px;
     --border-radius-md: 16px;
@@ -38,7 +38,12 @@
 
 body {
     font-family: var(--font-body);
-    background-color: var(--bg-primary);
+    background: radial-gradient(circle at 10% 20%, rgba(15, 23, 42, 1) 0%, rgba(20, 15, 50, 1) 50%, rgba(10, 8, 28, 1) 100%);
+    background-image: linear-gradient(rgba(10, 8, 28, 0.75), rgba(10, 8, 28, 0.75)), url('https://changyiwu.github.io/teaching-web/background.png');
+    background-attachment: fixed;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: cover;
     color: var(--text-primary);
     min-height: 100vh;
     overflow-x: hidden;
