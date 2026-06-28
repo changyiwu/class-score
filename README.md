@@ -1,4 +1,4 @@
-# 課堂個別學生加減分登記系統 (Class Score Tracker)
+# 課堂表現登記系統 (Classroom Performance Tracker)
 
 為課堂觸控大螢幕設計的學生加減分網頁系統。
 
