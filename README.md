@@ -1,4 +1,4 @@
-# 班級加減分系統 (Class Score Tracker)
+# 課堂個別學生加減分登記系統 (Class Score Tracker)
 
 為課堂觸控大螢幕設計的學生加減分網頁系統。
 
