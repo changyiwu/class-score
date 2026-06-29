@@ -79,6 +79,12 @@ function setupEventListeners() {
         mobileForm.addEventListener("submit", handleMobileLoginSubmit);
     }
 
+    // Desktop Direct Login Form Submit
+    const desktopLoginForm = document.getElementById("desktop-login-form");
+    if (desktopLoginForm) {
+        desktopLoginForm.addEventListener("submit", handleDesktopLoginSubmit);
+    }
+
     // Desktop Create Class Form Submit
     const createClassForm = document.getElementById("create-class-form");
     if (createClassForm) {
@@ -136,6 +142,16 @@ function enterSystem() {
 function showDesktopLogin() {
     document.getElementById("desktop-view").classList.add("hidden");
     document.getElementById("desktop-login-view").classList.remove("hidden");
+    
+    // Clear direct desktop login password input and error message
+    const desktopPasswordInput = document.getElementById("desktop-password");
+    if (desktopPasswordInput) {
+        desktopPasswordInput.value = "";
+    }
+    const desktopErrorEl = document.getElementById("desktop-login-error-msg");
+    if (desktopErrorEl) {
+        desktopErrorEl.classList.add("hidden");
+    }
     
     // Generate a fresh session token
     state.sessionToken = generateSessionToken();
@@ -418,6 +434,64 @@ function handleMobileLoginSubmit(e) {
             // Login successful! Update UI to success screen
             document.getElementById("mobile-login-form-container").classList.add("hidden");
             document.getElementById("mobile-success-container").classList.remove("hidden");
+        } else {
+            errorEl.classList.remove("hidden");
+            errorEl.querySelector("span").innerText = res.error;
+            passwordInput.value = "";
+            passwordInput.focus();
+        }
+    })
+    .catch(err => {
+        submitBtn.disabled = false;
+        btnText.classList.remove("hidden");
+        btnSpinner.classList.add("hidden");
+        
+        errorEl.classList.remove("hidden");
+        errorEl.querySelector("span").innerText = "無法連線至後端系統，請重新送出";
+        console.error(err);
+    });
+}
+
+// Handle direct login submission on desktop (Big Screen)
+function handleDesktopLoginSubmit(e) {
+    const passwordInput = document.getElementById("desktop-password");
+    const errorEl = document.getElementById("desktop-login-error-msg");
+    const submitBtn = document.getElementById("btn-desktop-login");
+    const btnText = submitBtn.querySelector(".btn-text");
+    const btnSpinner = submitBtn.querySelector(".btn-spinner");
+    
+    const password = passwordInput.value;
+    if (!password) return;
+    
+    // UI Loading state
+    errorEl.classList.add("hidden");
+    submitBtn.disabled = true;
+    btnText.classList.add("hidden");
+    btnSpinner.classList.remove("hidden");
+    
+    callAPI({
+        action: "login",
+        password: password,
+        session: state.sessionToken
+    })
+    .then(res => {
+        submitBtn.disabled = false;
+        btnText.classList.remove("hidden");
+        btnSpinner.classList.add("hidden");
+        
+        if (res.success) {
+            // Stop polling
+            if (state.pollInterval) clearInterval(state.pollInterval);
+            
+            // Cache session locally
+            const expiry = Date.now() + 45 * 60 * 1000; // 45 minutes
+            localStorage.setItem("session_token", state.sessionToken);
+            localStorage.setItem("session_expiry", expiry.toString());
+            
+            state.sessionExpiry = expiry;
+            
+            showToast("登入成功！", "success");
+            enterSystem();
         } else {
             errorEl.classList.remove("hidden");
             errorEl.querySelector("span").innerText = res.error;

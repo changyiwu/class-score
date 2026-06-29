@@ -733,6 +733,53 @@ input[type="text"]:focus, input[type="number"]:focus, input[type="password"]:foc
     100% { transform: scale(0.9); opacity: 0.4; }
 }
 
+.direct-login-container {
+    margin-bottom: 24px;
+}
+
+.divider {
+    display: flex;
+    align-items: center;
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    margin-bottom: 16px;
+    opacity: 0.7;
+}
+
+.divider::before,
+.divider::after {
+    content: '';
+    flex: 1;
+    border-bottom: 1px solid var(--border-glass);
+}
+
+.divider:not(:empty)::before {
+    margin-right: .5em;
+}
+
+.divider:not(:empty)::after {
+    margin-left: .5em;
+}
+
+.form-group-row {
+    display: flex;
+    gap: 10px;
+    width: 100%;
+}
+
+.form-group-row input[type="password"] {
+    flex: 1;
+    padding: 10px 14px;
+    font-size: 0.95rem;
+}
+
+.form-group-row button {
+    padding: 10px 20px;
+    font-size: 0.95rem;
+    flex-shrink: 0;
+}
+
 .login-instructions {
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid var(--border-glass);

@@ -135,6 +135,24 @@
                     </div>
                 </div>
                 
+                <div class="direct-login-container">
+                    <div class="divider">
+                        <span>或</span>
+                    </div>
+                    <form id="desktop-login-form" onsubmit="return false;" class="direct-login-form">
+                        <div class="form-group-row">
+                            <input type="password" id="desktop-password" placeholder="請在大螢幕輸入密碼" required autocomplete="current-password">
+                            <button type="submit" id="btn-desktop-login" class="btn btn-primary">
+                                <span class="btn-text">直接登入</span>
+                                <div class="btn-spinner hidden"></div>
+                            </button>
+                        </div>
+                        <div id="desktop-login-error-msg" class="alert alert-danger hidden" style="margin-top: 10px; margin-bottom: 0;">
+                            <i class="fa-solid fa-circle-exclamation"></i> <span>密碼錯誤</span>
+                        </div>
+                    </form>
+                </div>
+                
                 <div class="login-instructions">
                     <h3><i class="fa-solid fa-mobile-screen-button"></i> 教師登入步驟：</h3>
                     <ol>
