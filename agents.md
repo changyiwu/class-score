@@ -26,7 +26,6 @@ class-score/
 ├── .gitignore
 ├── agents.md
 ├── handoff.md
-├── ANTIGRAVITY.md
 ├── README.md
 ├── app.js
 ├── index.html
@@ -47,3 +46,17 @@ class-score/
 - 修改共用檔案前先讀最新內容，避免覆蓋其他 Agent 的變更
 - 所有回應與文件使用繁體中文
 - 修改前先確認計畫，優先保留原有資料結構
+
+## 技術規範
+
+### 安全保護
+- 密碼存放於 Google 試算表 `_Settings` 分頁；後端以 `CacheService` 管理 session，時間上限 **45 分鐘**
+- 前端發送 API 請求時，**必須使用 `text/plain` 格式的 POST**，以避免引發 CORS preflight OPTIONS 預檢錯誤
+
+### UI/UX 設計
+- 保持現代暗色系設計（Glassmorphism 毛玻璃視覺效果）
+- 學生卡片調整分數時採**樂觀更新**（Optimistic Update），加入放大／縮小與綠／紅變色動畫
+
+### 版本控制
+- 不要將敏感的 OAuth token 或認證金鑰提交至 Git
+- `gas/.clasp.json` 含腳本 ID，可提交；但個人認證檔 `~/.clasprc.json` 必須留在使用者主目錄，**絕不能進入專案目錄**
