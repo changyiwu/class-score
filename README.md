@@ -13,9 +13,12 @@
 - `index.html` - 大螢幕及手機登入介面 HTML5 結構。
 - `style.css` - UI 毛玻璃風格、深色主題與微互動 CSS 樣式。
 - `app.js` - 前端邏輯控制與 API 通訊。
+- `walkthrough.md` - 部署指引與操作手冊。
 - `gas/` - Google Apps Script 後端代碼 (透過 `clasp` 管理)。
   - `Code.js` - GAS API 分發器與 Session 快取管理。
   - `appsscript.json` - GAS 專案配置清單。
 
 ## 使用與部署方式
 詳細部署指引、Google Apps Script 授權以及操作手冊請參閱專案內的 [walkthrough.md](./walkthrough.md)。
+
+> ⚠️ **首次部署後請立即修改密碼**：到 `ClassScoreDB` 試算表的 `_Settings` 分頁，把 `Password` 從預設的 `1234` 改成 6 位以上的英數混合字串。API 端點對外公開，密碼強度是最後一道防線。
