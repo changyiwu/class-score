@@ -27,9 +27,11 @@ class-score/
 ├── agents.md
 ├── handoff.md
 ├── README.md
+├── walkthrough.md
 ├── app.js
 ├── index.html
 ├── style.css
+├── vendor/
 └── gas/
 ```
 
@@ -65,6 +67,11 @@ class-score/
 ### UI/UX 設計
 - 保持現代暗色系設計（Glassmorphism 毛玻璃視覺效果）
 - 學生卡片調整分數時採**樂觀更新**（Optimistic Update），加入放大／縮小與綠／紅變色動畫
+
+### 前端相依
+- QR Code 函式庫位於登入關鍵路徑，**必須本地載入**（`vendor/qrcode.min.js`），不可改回 CDN；教室網路阻擋 CDN 時仍須能掃碼登入
+- FontAwesome 維持 CDN 但**必須帶 `integrity` 與 `crossorigin`**；升級版本時要同步更新 SRI hash（可由 `https://api.cdnjs.com/libraries/font-awesome/<版本>?fields=sri` 取得）
+- Google Fonts 的 CSS 會依瀏覽器動態產生，無法使用 SRI
 
 ### 版本控制
 - 不要將敏感的 OAuth token 或認證金鑰提交至 Git
