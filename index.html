@@ -74,17 +74,11 @@
                         <div class="class-stats">
                             <span class="stat-badge"><i class="fa-solid fa-users"></i> 學生人數: <span id="stat-student-count">0</span> 人</span>
                             <div class="class-actions">
-                                <button type="button" id="btn-edit-names" class="action-btn" title="編輯學生姓名">
-                                    <i class="fa-solid fa-user-pen"></i> 編輯姓名
+                                <button type="button" id="btn-edit-seats" class="action-btn" title="新增或移除座號">
+                                    <i class="fa-solid fa-table-cells"></i> 編輯座號
                                 </button>
                                 <button type="button" id="btn-view-logs" class="action-btn" title="查看操作紀錄">
                                     <i class="fa-solid fa-clock-rotate-left"></i> 操作紀錄
-                                </button>
-                                <button type="button" id="btn-reset-scores" class="action-btn" title="將本班分數全部歸零">
-                                    <i class="fa-solid fa-arrow-rotate-left"></i> 重設分數
-                                </button>
-                                <button type="button" id="btn-delete-class" class="action-btn action-btn-danger" title="刪除整個班級">
-                                    <i class="fa-solid fa-trash"></i> 刪除班級
                                 </button>
                             </div>
                         </div>
@@ -221,27 +215,35 @@
             </div>
         </div>
 
-        <!-- ==================== MODAL: 編輯學生姓名 ==================== -->
-        <div id="modal-names" class="modal-overlay hidden">
+        <!-- ==================== MODAL: 編輯座號 ==================== -->
+        <div id="modal-seats" class="modal-overlay hidden">
             <div class="modal modal-lg">
                 <div class="modal-header">
-                    <h3><i class="fa-solid fa-user-pen"></i> 編輯學生姓名</h3>
-                    <button type="button" class="modal-close" data-close-modal="modal-names" aria-label="關閉">
+                    <h3><i class="fa-solid fa-table-cells"></i> 編輯座號</h3>
+                    <button type="button" class="modal-close" data-close-modal="modal-seats" aria-label="關閉">
                         <i class="fa-solid fa-xmark"></i>
                     </button>
                 </div>
                 <div class="modal-body">
                     <p class="modal-hint">
-                        留空即還原為預設名稱，卡片會退回只顯示座號。座號與分數不會被更動。
+                        點擊座號可切換「有／無」。<strong>亮起</strong>代表該座號存在於班上。
+                        新增的座號分數從 0 開始；<strong class="text-danger">移除座號會一併刪除該生的姓名與分數，無法復原</strong>。
+                        既有學生的姓名與分數不受影響。
                     </p>
-                    <div id="names-edit-grid" class="names-edit-grid">
+                    <div class="seats-range">
+                        <label for="input-max-seat">最大座號</label>
+                        <input type="number" id="input-max-seat" min="1" max="50" value="30">
+                        <span class="seats-range-hint">調大可新增後面的座號，調小會移除超出範圍的座號</span>
+                    </div>
+                    <div id="seats-edit-grid" class="vacant-grid seats-edit-grid">
                         <!-- Populated dynamically -->
                     </div>
+                    <div id="seats-summary" class="seats-summary"></div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-close-modal="modal-names">取消</button>
-                    <button type="button" id="btn-save-names" class="btn btn-primary">
-                        <span class="btn-text"><i class="fa-solid fa-check"></i> 儲存姓名</span>
+                    <button type="button" class="btn btn-secondary" data-close-modal="modal-seats">取消</button>
+                    <button type="button" id="btn-save-seats" class="btn btn-primary">
+                        <span class="btn-text"><i class="fa-solid fa-check"></i> 儲存座號</span>
                         <div class="btn-spinner hidden"></div>
                     </button>
                 </div>
@@ -285,10 +287,6 @@
                 </div>
                 <div class="modal-body">
                     <p id="confirm-message"></p>
-                    <div id="confirm-typed-wrapper" class="confirm-typed hidden">
-                        <label for="confirm-typed-input">請輸入 <strong id="confirm-typed-target"></strong> 以確認：</label>
-                        <input type="text" id="confirm-typed-input" autocomplete="off">
-                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-close-modal="modal-confirm">取消</button>
