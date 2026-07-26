@@ -24,10 +24,7 @@ const state = {
     currentClass: null,
     students: [],
     timerInterval: null,
-    pollInterval: null,
-    confirmAction: null,   // 確認對話框按下「確認」時要執行的動作
-    seatsOriginal: [],     // 開啟座號編輯器當下的座號組成（用來比對變更）
-    seatsSelected: []      // 編輯中選取的座號
+    pollInterval: null
 };
 
 // Initial setup
@@ -116,31 +113,8 @@ function setupEventListeners() {
     setupModalListeners();
 }
 
-// 班級管理動作（編輯座號／操作紀錄）
+// 班級管理動作（操作紀錄）
 function setupClassActionListeners() {
-    const editSeatsBtn = document.getElementById("btn-edit-seats");
-    if (editSeatsBtn) editSeatsBtn.addEventListener("click", openSeatsEditor);
-
-    const saveSeatsBtn = document.getElementById("btn-save-seats");
-    if (saveSeatsBtn) saveSeatsBtn.addEventListener("click", handleSaveSeats);
-
-    const maxSeatInput = document.getElementById("input-max-seat");
-    if (maxSeatInput) {
-        // 與建立班級的人數欄位一致：打字途中不夾值，離開欄位才修正
-        maxSeatInput.addEventListener("input", (e) => {
-            const max = parseInt(e.target.value, 10);
-            if (isNaN(max) || max < 1 || max > MAX_STUDENT_COUNT) return;
-            renderSeatsEditGrid(max);
-        });
-        maxSeatInput.addEventListener("change", (e) => {
-            let max = parseInt(e.target.value, 10);
-            if (isNaN(max)) max = state.seatsOriginal.length ? Math.max.apply(null, state.seatsOriginal) : DEFAULT_STUDENT_COUNT;
-            max = Math.min(MAX_STUDENT_COUNT, Math.max(1, max));
-            e.target.value = max;
-            renderSeatsEditGrid(max);
-        });
-    }
-
     const viewLogsBtn = document.getElementById("btn-view-logs");
     if (viewLogsBtn) viewLogsBtn.addEventListener("click", openLogsViewer);
 
@@ -166,9 +140,6 @@ function setupModalListeners() {
         const open = document.querySelector(".modal-overlay:not(.hidden)");
         if (open) closeModal(open.id);
     });
-
-    const confirmOkBtn = document.getElementById("btn-confirm-ok");
-    if (confirmOkBtn) confirmOkBtn.addEventListener("click", runConfirmAction);
 }
 
 // ==================== ROUTING & INITIALIZATION ==================== */
@@ -872,207 +843,6 @@ function openModal(id) {
 function closeModal(id) {
     const el = document.getElementById(id);
     if (el) el.classList.add("hidden");
-}
-
-// 設定按鈕的載入狀態（沿用登入按鈕既有的 btn-text / btn-spinner 結構）
-function setButtonLoading(button, loading) {
-    if (!button) return;
-    const text = button.querySelector(".btn-text");
-    const spinner = button.querySelector(".btn-spinner");
-    button.disabled = loading;
-    if (text) text.classList.toggle("hidden", loading);
-    if (spinner) spinner.classList.toggle("hidden", !loading);
-}
-
-// 通用確認對話框
-function openConfirm(options) {
-    state.confirmAction = options.onConfirm;
-
-    document.getElementById("confirm-title").innerHTML =
-        `<i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(options.title || "請確認")}`;
-    document.getElementById("confirm-message").textContent = options.message || "";
-    document.getElementById("btn-confirm-ok").querySelector(".btn-text").textContent =
-        options.confirmText || "確認執行";
-
-    setButtonLoading(document.getElementById("btn-confirm-ok"), false);
-    openModal("modal-confirm");
-}
-
-function runConfirmAction() {
-    if (typeof state.confirmAction === "function") state.confirmAction();
-}
-
-// ==================== 編輯座號 ==================== */
-
-function openSeatsEditor() {
-    if (!state.currentClass || state.currentClass === "__new__") return;
-
-    // 記下開啟當下的座號組成，用來比對出新增與移除
-    state.seatsOriginal = state.students.map(s => s.seat);
-    state.seatsSelected = state.seatsOriginal.slice();
-
-    const maxSeat = state.seatsOriginal.length
-                    ? Math.max.apply(null, state.seatsOriginal)
-                    : DEFAULT_STUDENT_COUNT;
-    document.getElementById("input-max-seat").value = maxSeat;
-
-    renderSeatsEditGrid(maxSeat);
-    setButtonLoading(document.getElementById("btn-save-seats"), false);
-    openModal("modal-seats");
-}
-
-/**
- * 渲染座號格。
- * 顯示範圍是 1..max，但若原本就有超出 max 的座號也一併顯示，
- * 否則那些座號會在使用者毫無察覺的情況下被移除。
- */
-function renderSeatsEditGrid(maxSeat) {
-    const grid = document.getElementById("seats-edit-grid");
-    grid.innerHTML = "";
-
-    const highest = Math.max(maxSeat, ...state.seatsOriginal, 1);
-
-    // 調整最大座號時，超出範圍的選取自動取消；範圍內原本就有的維持原狀
-    state.seatsSelected = state.seatsSelected.filter(seat => seat <= maxSeat);
-
-    for (let seat = 1; seat <= highest; seat++) {
-        const box = document.createElement("div");
-        box.className = "vacant-box";
-        box.dataset.seat = seat;
-
-        const checkboxId = `seat-check-${seat}`;
-        const checkbox = document.createElement("input");
-        checkbox.type = "checkbox";
-        checkbox.id = checkboxId;
-        checkbox.value = seat;
-        checkbox.checked = state.seatsSelected.indexOf(seat) !== -1;
-        checkbox.addEventListener("change", () => toggleSeat(seat, checkbox.checked));
-
-        const label = document.createElement("label");
-        label.className = "vacant-label";
-        label.setAttribute("for", checkboxId);
-        label.textContent = seat.toString().padStart(2, "0");
-
-        box.appendChild(checkbox);
-        box.appendChild(label);
-        grid.appendChild(box);
-    }
-
-    updateSeatsSummary();
-}
-
-function toggleSeat(seat, checked) {
-    const idx = state.seatsSelected.indexOf(seat);
-    if (checked && idx === -1) state.seatsSelected.push(seat);
-    if (!checked && idx !== -1) state.seatsSelected.splice(idx, 1);
-    updateSeatsSummary();
-}
-
-// 即時算出將新增／移除哪些座號，並在格子上標色
-function updateSeatsSummary() {
-    const original = state.seatsOriginal;
-    const selected = state.seatsSelected;
-
-    const added = selected.filter(s => original.indexOf(s) === -1).sort((a, b) => a - b);
-    const removed = original.filter(s => selected.indexOf(s) === -1).sort((a, b) => a - b);
-
-    document.querySelectorAll("#seats-edit-grid .vacant-box").forEach(box => {
-        const seat = parseInt(box.dataset.seat, 10);
-        box.classList.toggle("seat-adding", added.indexOf(seat) !== -1);
-        box.classList.toggle("seat-removing", removed.indexOf(seat) !== -1);
-    });
-
-    const summary = document.getElementById("seats-summary");
-    const parts = [];
-
-    if (added.length) {
-        parts.push(`<div><span class="summary-add">＋ 新增 ${added.length} 個座號</span>：${added.join("、")}（分數從 0 開始）</div>`);
-    }
-    if (removed.length) {
-        const names = removed.map(seat => {
-            const student = state.students.find(s => s.seat === seat);
-            const label = student && student.name !== `學生${seat}` ? `${seat} ${student.name}` : `${seat}`;
-            const score = student ? `${student.score >= 0 ? "+" : ""}${student.score}分` : "";
-            return escapeHtml(`${label}（${score}）`);
-        });
-        parts.push(`<div><span class="summary-remove">－ 移除 ${removed.length} 個座號</span>：${names.join("、")}</div>`);
-    }
-    if (!parts.length) {
-        parts.push(`<div style="color:var(--text-muted);">目前沒有變更，共 ${selected.length} 個座號</div>`);
-    } else {
-        parts.push(`<div style="color:var(--text-muted);">調整後共 ${selected.length} 個座號</div>`);
-    }
-
-    summary.innerHTML = parts.join("");
-}
-
-function handleSaveSeats() {
-    const selected = state.seatsSelected.slice().sort((a, b) => a - b);
-
-    if (selected.length === 0) {
-        showToast("班級至少要保留一個座號", "error");
-        return;
-    }
-
-    const removed = state.seatsOriginal.filter(s => selected.indexOf(s) === -1);
-    const added = selected.filter(s => state.seatsOriginal.indexOf(s) === -1);
-
-    if (removed.length === 0 && added.length === 0) {
-        closeModal("modal-seats");
-        showToast("座號沒有變更", "info");
-        return;
-    }
-
-    // 移除座號會刪掉該生的姓名與分數，先要求確認
-    if (removed.length > 0) {
-        const detail = removed.map(seat => {
-            const student = state.students.find(s => s.seat === seat);
-            return student && student.name !== `學生${seat}`
-                   ? `${seat}(${student.name})` : `${seat}`;
-        }).join("、");
-
-        openConfirm({
-            title: "確認移除座號",
-            message: `即將移除座號 ${detail}，這 ${removed.length} 位學生的姓名與分數會一併刪除且無法復原。`
-                     + (added.length ? `同時會新增 ${added.length} 個座號。` : ""),
-            confirmText: "確認移除",
-            onConfirm: () => submitSeats(selected, document.getElementById("btn-confirm-ok"), true)
-        });
-        return;
-    }
-
-    submitSeats(selected, document.getElementById("btn-save-seats"), false);
-}
-
-function submitSeats(selected, button, fromConfirm) {
-    setButtonLoading(button, true);
-
-    callAPI({
-        action: "update_class_seats",
-        className: state.currentClass,
-        seats: selected
-    })
-    .then(res => {
-        setButtonLoading(button, false);
-        if (res.success) {
-            if (fromConfirm) closeModal("modal-confirm");
-            closeModal("modal-seats");
-
-            const bits = [];
-            if (res.added.length) bits.push(`新增 ${res.added.length} 個`);
-            if (res.removed.length) bits.push(`移除 ${res.removed.length} 個`);
-            showToast(bits.length ? `座號已更新（${bits.join("、")}）` : "座號沒有變更", "success");
-
-            loadClassData(state.currentClass);
-        } else {
-            showToast("更新失敗: " + res.error, "error");
-        }
-    })
-    .catch(err => {
-        setButtonLoading(button, false);
-        showToast("網路錯誤，座號未更新", "error");
-        console.error(err);
-    });
 }
 
 // ==================== 操作紀錄 ==================== */
