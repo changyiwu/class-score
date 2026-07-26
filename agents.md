@@ -24,7 +24,7 @@
 - [x] 班級名稱驗證、加減分範圍限制、HTML 注入防護
 - [x] 補上 `walkthrough.md` 部署與操作手冊
 - [x] QR Code 函式庫本地化、FontAwesome 加 SRI
-- [x] 班級管理功能：重設分數、刪除班級（需逐字確認）、批次編輯學生姓名
+- [x] 既有班級的座號調整（新增／移除座號，留任學生資料不動）
 - [x] 操作紀錄 `_Log` 分頁與查詢介面
 - [ ] **將 `_Settings` 的 `Password` 從預設 `1234` 改掉**（未完成，見 handoff）
 - [ ] 功能面待辦：PWA manifest、分數匯出 CSV
@@ -71,7 +71,8 @@ class-score/
 - 前端發送 API 請求時，**必須使用 `text/plain` 格式的 POST**，以避免引發 CORS preflight OPTIONS 預檢錯誤
 
 ### 資料結構
-- 班級分頁欄位固定為 `座號 / 姓名 / 分數`（A/B/C 欄），新增欄位前須確認 `handleGetClassData`、`handleUpdateScore`、`handleUpdateStudentNames` 的欄位索引
+- 班級分頁欄位固定為 `座號 / 姓名 / 分數`（A/B/C 欄），新增欄位前須確認 `handleGetClassData`、`handleUpdateScore`、`handleUpdateClassSeats` 的欄位索引
+- `handleUpdateClassSeats` 採「整批重寫資料列」而非逐列插刪：讀進現況 → 組出新的完整列陣列 → 一次寫回，座號變少時再刪掉多出來的列。這樣可避免多次 insertRow/deleteRow 的列號位移問題，並順便維持座號排序
 - 以 `_` 開頭的分頁為系統保留：`_Settings`（密碼與時長）、`_Log`（操作紀錄），皆不會出現在班級清單
 - `_Log` 欄位：`時間 / 班級 / 座號 / 姓名 / 動作 / 變動 / 變動後分數 / 操作裝置`；超過 5000 筆自動從最舊裁切
 - 「操作裝置」只存 session token 前 8 碼，用於區分登入裝置。系統為單一共用密碼，**無法識別個別教師身分**

@@ -17,7 +17,7 @@ var GLOBAL_THROTTLE_MS = 2000;               // 節流時每次請求的延遲
 
 var MAX_SCORE_CHANGE = 10;                   // 單次加減分的絕對值上限
 var MAX_CLASS_NAME_LENGTH = 15;
-var MAX_STUDENT_NAME_LENGTH = 20;
+var MAX_SEAT_NUMBER = 50;                    // 座號上限
 var LOCK_TIMEOUT_MS = 15000;                 // 寫入試算表時等待鎖的上限
 
 var LOG_SHEET_NAME = "_Log";
@@ -80,14 +80,8 @@ function doPost(e) {
       case "update_score":
         return handleUpdateScore(request.className, request.seatNumber, request.scoreChange, session);
 
-      case "reset_scores":
-        return handleResetScores(request.className, session);
-
-      case "delete_class":
-        return handleDeleteClass(request.className, session);
-
-      case "update_student_names":
-        return handleUpdateStudentNames(request.className, request.names, session);
+      case "update_class_seats":
+        return handleUpdateClassSeats(request.className, request.seats, session);
 
       case "get_logs":
         return handleGetLogs(request.className, request.limit);
@@ -611,8 +605,8 @@ function handleCreateClass(className, totalStudents, vacantSeats, session) {
   if (isNaN(totalStudents) || totalStudents <= 0) {
     totalStudents = 30;
   }
-  if (totalStudents > 50) {
-    totalStudents = 50;
+  if (totalStudents > MAX_SEAT_NUMBER) {
+    totalStudents = MAX_SEAT_NUMBER;
   }
 
   var vacantSeatsArray = [];
@@ -737,12 +731,39 @@ function handleUpdateScore(className, seatNumber, scoreChange, session) {
 }
 
 /**
- * 將整個班級的分數歸零（保留座號與姓名）。
- * 用於每學期重新開始，取代原本必須手動到試算表清 C 欄的做法。
+ * 調整既有班級的座號組成——新增或移除座號。
+ *
+ * seats 為「調整後應該存在的完整座號清單」，後端據此比對現況：
+ *   - 清單中有、目前沒有 → 新增（姓名為預設「學生N」、分數 0）
+ *   - 目前有、清單中沒有 → 移除（該生的姓名與分數一併消失，不可復原）
+ *   - 兩邊都有 → 原封不動保留姓名與分數
+ *
+ * 作法是整批重寫資料列而非逐列插刪：先把現況讀進 map，組出新的完整列陣列後
+ * 一次寫回。這樣順便讓座號保持由小到大排列，也避免多次 insertRow/deleteRow
+ * 造成的效能問題與列號位移錯誤。
  */
-function handleResetScores(className, session) {
+function handleUpdateClassSeats(className, seats, session) {
   if (!className) {
     return jsonResponse({ success: false, error: "Missing class name" });
+  }
+  if (!seats || !seats.length) {
+    return jsonResponse({ success: false, error: "班級至少要保留一個座號" });
+  }
+
+  // 正規化：轉整數、去重、排序、過濾超出範圍者
+  var desired = [];
+  var seen = {};
+  for (var i = 0; i < seats.length; i++) {
+    var seat = parseInt(seats[i], 10);
+    if (isNaN(seat) || seat < 1 || seat > MAX_SEAT_NUMBER) continue;
+    if (seen[seat]) continue;
+    seen[seat] = true;
+    desired.push(seat);
+  }
+  desired.sort(function(a, b) { return a - b; });
+
+  if (desired.length === 0) {
+    return jsonResponse({ success: false, error: "沒有有效的座號" });
   }
 
   var lock = LockService.getScriptLock();
@@ -758,147 +779,80 @@ function handleResetScores(className, session) {
       return jsonResponse({ success: false, error: "Class not found" });
     }
 
-    var lastRow = sheet.getLastRow();
-    var studentCount = lastRow - 1; // 扣掉標題列
-    if (studentCount <= 0) {
-      return jsonResponse({ success: true, className: className, resetCount: 0 });
+    // 讀入現況：座號 → { name, score }
+    var data = sheet.getDataRange().getValues();
+    var existing = {};
+    for (var r = 1; r < data.length; r++) {
+      var s = parseInt(data[r][0], 10);
+      if (isNaN(s)) continue;
+      var sc = parseInt(data[r][2], 10);
+      existing[s] = {
+        name: data[r][1] ? data[r][1].toString() : ("學生" + s),
+        score: isNaN(sc) ? 0 : sc
+      };
     }
 
-    // 一次寫入整欄，比逐列 setValue 快得多
-    var zeros = [];
-    for (var i = 0; i < studentCount; i++) {
-      zeros.push([0]);
+    // 比對出新增與移除的座號
+    var added = [];
+    var removed = [];
+    for (var d = 0; d < desired.length; d++) {
+      if (!existing[desired[d]]) added.push(desired[d]);
     }
-    sheet.getRange(2, 3, studentCount, 1).setValues(zeros);
+    for (var key in existing) {
+      if (!existing.hasOwnProperty(key)) continue;
+      if (!seen[parseInt(key, 10)]) removed.push(parseInt(key, 10));
+    }
+    removed.sort(function(a, b) { return a - b; });
+
+    if (added.length === 0 && removed.length === 0) {
+      return jsonResponse({
+        success: true,
+        className: className,
+        added: [],
+        removed: [],
+        totalSeats: desired.length
+      });
+    }
+
+    // 組出調整後的完整資料列，保留留任學生的姓名與分數
+    var rows = desired.map(function(seat) {
+      var prev = existing[seat];
+      return prev ? [seat, prev.name, prev.score]
+                  : [seat, "學生" + seat, 0];
+    });
+
+    // 先清掉舊的資料列（保留標題列），再一次寫入新的
+    var oldRowCount = sheet.getLastRow() - 1;
+    if (oldRowCount > 0) {
+      sheet.getRange(2, 1, oldRowCount, 3).clearContent();
+    }
+    sheet.getRange(2, 1, rows.length, 3).setValues(rows);
+
+    // 座號變少時要把多出來的列真的刪掉，只清內容會留下一堆空白列
+    if (oldRowCount > rows.length) {
+      sheet.deleteRows(2 + rows.length, oldRowCount - rows.length);
+    }
     SpreadsheetApp.flush();
 
-    appendLog("重設分數", className, "", "", "", 0, session);
+    // 逐筆記錄，移除的座號連同當時分數一起留存以便追溯
+    var logRows = [];
+    added.forEach(function(seat) {
+      logRows.push(buildLogRow("新增座號", className, seat, "學生" + seat, "", 0, session));
+    });
+    removed.forEach(function(seat) {
+      var prev = existing[seat];
+      logRows.push(buildLogRow("移除座號", className, seat, prev ? prev.name : "",
+                               "", prev ? prev.score : "", session));
+    });
+    appendLogRows(logRows);
     trimLogIfNeeded();
 
     return jsonResponse({
       success: true,
       className: className,
-      resetCount: studentCount
-    });
-  } finally {
-    lock.releaseLock();
-  }
-}
-
-/**
- * 刪除整個班級（試算表分頁）。
- * 這是不可復原的操作，前端必須要求使用者輸入班級名稱確認。
- */
-function handleDeleteClass(className, session) {
-  if (!className) {
-    return jsonResponse({ success: false, error: "Missing class name" });
-  }
-  if (className.toString().indexOf("_") === 0) {
-    return jsonResponse({ success: false, error: "系統分頁不可刪除" });
-  }
-
-  var lock = LockService.getScriptLock();
-  try {
-    lock.waitLock(LOCK_TIMEOUT_MS);
-  } catch (e) {
-    return jsonResponse({ success: false, error: "系統忙碌中，請稍後再試" });
-  }
-
-  try {
-    var ss = getSpreadsheet();
-    var sheet = ss.getSheetByName(className);
-    if (!sheet) {
-      return jsonResponse({ success: false, error: "Class not found" });
-    }
-
-    // 先記錄再刪除，否則刪完就查不到這個班級曾存在
-    var studentCount = Math.max(0, sheet.getLastRow() - 1);
-    appendLog("刪除班級", className, "", "", "", "", session);
-
-    ss.deleteSheet(sheet);
-    SpreadsheetApp.flush();
-
-    return jsonResponse({
-      success: true,
-      deleted: className,
-      studentCount: studentCount,
-      classes: listClassNames(ss)
-    });
-  } finally {
-    lock.releaseLock();
-  }
-}
-
-/**
- * 批次更新學生姓名。
- * names 格式：[{ seat: 1, name: "王小明" }, ...]
- * 只改 B 欄，座號與分數不動。
- */
-function handleUpdateStudentNames(className, names, session) {
-  if (!className) {
-    return jsonResponse({ success: false, error: "Missing class name" });
-  }
-  if (!names || !names.length) {
-    return jsonResponse({ success: false, error: "沒有要更新的姓名" });
-  }
-
-  var lock = LockService.getScriptLock();
-  try {
-    lock.waitLock(LOCK_TIMEOUT_MS);
-  } catch (e) {
-    return jsonResponse({ success: false, error: "系統忙碌中，請稍後再試" });
-  }
-
-  try {
-    var sheet = getSpreadsheet().getSheetByName(className);
-    if (!sheet) {
-      return jsonResponse({ success: false, error: "Class not found" });
-    }
-
-    var data = sheet.getDataRange().getValues();
-
-    // 座號 → 試算表列號
-    var seatToRow = {};
-    for (var i = 1; i < data.length; i++) {
-      var s = parseInt(data[i][0], 10);
-      if (!isNaN(s)) seatToRow[s] = i + 1;
-    }
-
-    var updatedCount = 0;
-    var logRows = [];
-
-    for (var n = 0; n < names.length; n++) {
-      var entry = names[n];
-      var seat = parseInt(entry && entry.seat, 10);
-      if (isNaN(seat) || !seatToRow[seat]) continue;
-
-      var newName = (entry.name === undefined || entry.name === null)
-                    ? "" : entry.name.toString().trim();
-      if (newName.length > MAX_STUDENT_NAME_LENGTH) {
-        newName = newName.substring(0, MAX_STUDENT_NAME_LENGTH);
-      }
-      // 留空即還原為預設名稱，卡片會退回只顯示座號
-      if (!newName) newName = "學生" + seat;
-
-      var rowIndex = seatToRow[seat];
-      var oldName = data[rowIndex - 1][1] ? data[rowIndex - 1][1].toString() : "";
-      if (oldName === newName) continue; // 沒變就不寫，減少無謂寫入與紀錄
-
-      sheet.getRange(rowIndex, 2).setValue(newName);
-      updatedCount++;
-      logRows.push(buildLogRow("改姓名", className, seat, newName, "", "", session));
-    }
-
-    if (updatedCount > 0) {
-      SpreadsheetApp.flush();
-      appendLogRows(logRows);
-      trimLogIfNeeded();
-    }
-
-    return jsonResponse({
-      success: true,
-      className: className,
-      updatedCount: updatedCount
+      added: added,
+      removed: removed,
+      totalSeats: desired.length
     });
   } finally {
     lock.releaseLock();
