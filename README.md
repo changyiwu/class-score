@@ -14,6 +14,7 @@
 - `style.css` - UI 毛玻璃風格、深色主題與微互動 CSS 樣式。
 - `app.js` - 前端邏輯控制與 API 通訊。
 - `walkthrough.md` - 部署指引與操作手冊。
+- `vendor/` - 本地化的第三方函式庫（`qrcode.min.js`）。
 - `gas/` - Google Apps Script 後端代碼 (透過 `clasp` 管理)。
   - `Code.js` - GAS API 分發器與 Session 快取管理。
   - `appsscript.json` - GAS 專案配置清單。
