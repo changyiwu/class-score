@@ -24,7 +24,9 @@ const state = {
     currentClass: null,
     students: [],
     timerInterval: null,
-    pollInterval: null
+    pollInterval: null,
+    confirmAction: null,       // 確認對話框按下「確認」時要執行的動作
+    confirmRequireTyped: null  // 需逐字輸入才能確認的字串（刪除班級用）
 };
 
 // Initial setup
@@ -107,6 +109,63 @@ function setupEventListeners() {
     const createClassForm = document.getElementById("create-class-form");
     if (createClassForm) {
         createClassForm.addEventListener("submit", handleCreateClassSubmit);
+    }
+
+    setupClassActionListeners();
+    setupModalListeners();
+}
+
+// 班級管理動作（編輯姓名／操作紀錄／重設分數／刪除班級）
+function setupClassActionListeners() {
+    const editNamesBtn = document.getElementById("btn-edit-names");
+    if (editNamesBtn) editNamesBtn.addEventListener("click", openNamesEditor);
+
+    const saveNamesBtn = document.getElementById("btn-save-names");
+    if (saveNamesBtn) saveNamesBtn.addEventListener("click", handleSaveNames);
+
+    const viewLogsBtn = document.getElementById("btn-view-logs");
+    if (viewLogsBtn) viewLogsBtn.addEventListener("click", openLogsViewer);
+
+    const logsScope = document.getElementById("logs-all-classes");
+    if (logsScope) logsScope.addEventListener("change", loadLogs);
+
+    const resetBtn = document.getElementById("btn-reset-scores");
+    if (resetBtn) resetBtn.addEventListener("click", confirmResetScores);
+
+    const deleteBtn = document.getElementById("btn-delete-class");
+    if (deleteBtn) deleteBtn.addEventListener("click", confirmDeleteClass);
+}
+
+// 對話框共用行為：關閉鈕、點背景關閉、Esc 關閉
+function setupModalListeners() {
+    document.querySelectorAll("[data-close-modal]").forEach(btn => {
+        btn.addEventListener("click", () => closeModal(btn.dataset.closeModal));
+    });
+
+    document.querySelectorAll(".modal-overlay").forEach(overlay => {
+        overlay.addEventListener("click", (e) => {
+            // 只有點在遮罩本身（而非對話框內部）才關閉
+            if (e.target === overlay) closeModal(overlay.id);
+        });
+    });
+
+    document.addEventListener("keydown", (e) => {
+        if (e.key !== "Escape") return;
+        const open = document.querySelector(".modal-overlay:not(.hidden)");
+        if (open) closeModal(open.id);
+    });
+
+    const confirmOkBtn = document.getElementById("btn-confirm-ok");
+    if (confirmOkBtn) confirmOkBtn.addEventListener("click", runConfirmAction);
+
+    const typedInput = document.getElementById("confirm-typed-input");
+    if (typedInput) {
+        typedInput.addEventListener("input", updateConfirmButtonState);
+        typedInput.addEventListener("keydown", (e) => {
+            if (e.key === "Enter" && !document.getElementById("btn-confirm-ok").disabled) {
+                runConfirmAction();
+            }
+        });
     }
 }
 
@@ -799,6 +858,297 @@ function renderVacantSeatsGrid(studentCount) {
         
         grid.appendChild(box);
     }
+}
+
+// ==================== MODALS ==================== */
+
+function openModal(id) {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove("hidden");
+}
+
+function closeModal(id) {
+    const el = document.getElementById(id);
+    if (el) el.classList.add("hidden");
+}
+
+// 設定按鈕的載入狀態（沿用登入按鈕既有的 btn-text / btn-spinner 結構）
+function setButtonLoading(button, loading) {
+    if (!button) return;
+    const text = button.querySelector(".btn-text");
+    const spinner = button.querySelector(".btn-spinner");
+    button.disabled = loading;
+    if (text) text.classList.toggle("hidden", loading);
+    if (spinner) spinner.classList.toggle("hidden", !loading);
+}
+
+/**
+ * 通用確認對話框。
+ * requireTyped 有值時，使用者必須逐字輸入該字串才能按下確認——
+ * 用於刪除班級這種不可復原的操作。
+ */
+function openConfirm(options) {
+    state.confirmAction = options.onConfirm;
+    state.confirmRequireTyped = options.requireTyped || null;
+
+    document.getElementById("confirm-title").innerHTML =
+        `<i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(options.title || "請確認")}`;
+    document.getElementById("confirm-message").textContent = options.message || "";
+    document.getElementById("btn-confirm-ok").querySelector(".btn-text").textContent =
+        options.confirmText || "確認執行";
+
+    const typedWrapper = document.getElementById("confirm-typed-wrapper");
+    const typedInput = document.getElementById("confirm-typed-input");
+    typedInput.value = "";
+
+    if (options.requireTyped) {
+        document.getElementById("confirm-typed-target").textContent = options.requireTyped;
+        typedWrapper.classList.remove("hidden");
+    } else {
+        typedWrapper.classList.add("hidden");
+    }
+
+    setButtonLoading(document.getElementById("btn-confirm-ok"), false);
+    updateConfirmButtonState();
+    openModal("modal-confirm");
+
+    if (options.requireTyped) setTimeout(() => typedInput.focus(), 50);
+}
+
+function updateConfirmButtonState() {
+    const okBtn = document.getElementById("btn-confirm-ok");
+    if (!okBtn) return;
+    if (!state.confirmRequireTyped) {
+        okBtn.disabled = false;
+        return;
+    }
+    const typed = document.getElementById("confirm-typed-input").value.trim();
+    okBtn.disabled = typed !== state.confirmRequireTyped;
+}
+
+function runConfirmAction() {
+    if (typeof state.confirmAction === "function") state.confirmAction();
+}
+
+// ==================== 編輯學生姓名 ==================== */
+
+function openNamesEditor() {
+    if (!state.currentClass || state.currentClass === "__new__") return;
+    if (state.students.length === 0) {
+        showToast("此班級尚無學生資料", "error");
+        return;
+    }
+
+    const grid = document.getElementById("names-edit-grid");
+    grid.innerHTML = "";
+
+    state.students.forEach(student => {
+        const row = document.createElement("div");
+        row.className = "name-edit-row";
+
+        const label = document.createElement("span");
+        label.className = "name-edit-seat";
+        label.textContent = `座號 ${student.seat}`;
+
+        const input = document.createElement("input");
+        input.type = "text";
+        input.maxLength = 20;
+        input.dataset.seat = student.seat;
+        input.placeholder = `學生${student.seat}`;
+        // 預設名稱視為「未命名」，欄位留空讓老師直接填
+        input.value = student.name === `學生${student.seat}` ? "" : student.name;
+
+        row.appendChild(label);
+        row.appendChild(input);
+        grid.appendChild(row);
+    });
+
+    setButtonLoading(document.getElementById("btn-save-names"), false);
+    openModal("modal-names");
+}
+
+function handleSaveNames() {
+    const inputs = document.querySelectorAll("#names-edit-grid input[data-seat]");
+    const names = Array.from(inputs).map(input => ({
+        seat: parseInt(input.dataset.seat, 10),
+        name: input.value.trim()
+    }));
+
+    const saveBtn = document.getElementById("btn-save-names");
+    setButtonLoading(saveBtn, true);
+
+    callAPI({
+        action: "update_student_names",
+        className: state.currentClass,
+        names: names
+    })
+    .then(res => {
+        setButtonLoading(saveBtn, false);
+        if (res.success) {
+            closeModal("modal-names");
+            if (res.updatedCount > 0) {
+                showToast(`已更新 ${res.updatedCount} 位學生的姓名`, "success");
+                loadClassData(state.currentClass);
+            } else {
+                showToast("姓名沒有變更", "info");
+            }
+        } else {
+            showToast("儲存失敗: " + res.error, "error");
+        }
+    })
+    .catch(err => {
+        setButtonLoading(saveBtn, false);
+        showToast("網路錯誤，姓名未儲存", "error");
+        console.error(err);
+    });
+}
+
+// ==================== 操作紀錄 ==================== */
+
+function openLogsViewer() {
+    if (!state.currentClass || state.currentClass === "__new__") return;
+    openModal("modal-logs");
+    loadLogs();
+}
+
+function loadLogs() {
+    const container = document.getElementById("logs-content");
+    const allClasses = document.getElementById("logs-all-classes").checked;
+
+    container.innerHTML = `<div class="logs-empty"><div class="spinner"></div>載入紀錄中...</div>`;
+
+    callAPI({
+        action: "get_logs",
+        className: allClasses ? null : state.currentClass,
+        limit: 200
+    })
+    .then(res => {
+        if (!res.success) {
+            container.innerHTML = `<div class="logs-empty"><i class="fa-solid fa-circle-exclamation"></i>載入失敗：${escapeHtml(res.error)}</div>`;
+            return;
+        }
+        renderLogs(res.logs || []);
+    })
+    .catch(err => {
+        container.innerHTML = `<div class="logs-empty"><i class="fa-solid fa-plug-circle-xmark"></i>無法連線至伺服器</div>`;
+        console.error(err);
+    });
+}
+
+function renderLogs(logs) {
+    const container = document.getElementById("logs-content");
+
+    if (logs.length === 0) {
+        container.innerHTML = `<div class="logs-empty"><i class="fa-regular fa-clipboard"></i>目前沒有操作紀錄</div>`;
+        return;
+    }
+
+    const rows = logs.map(log => {
+        const delta = log.delta === "" || log.delta === null || log.delta === undefined
+                      ? "" : Number(log.delta);
+        let deltaClass = "";
+        let deltaText = "";
+        if (delta !== "") {
+            deltaClass = delta > 0 ? "positive" : (delta < 0 ? "negative" : "");
+            deltaText = delta > 0 ? `+${delta}` : String(delta);
+        }
+        const target = log.seat === "" || log.seat === null || log.seat === undefined
+                       ? "—"
+                       : `座號 ${log.seat}${log.name && log.name !== `學生${log.seat}` ? ` ${log.name}` : ""}`;
+
+        return `<tr>
+            <td>${escapeHtml(log.time)}</td>
+            <td>${escapeHtml(log.className)}</td>
+            <td>${escapeHtml(log.action)}</td>
+            <td>${escapeHtml(target)}</td>
+            <td class="log-delta ${deltaClass}">${escapeHtml(deltaText)}</td>
+            <td>${log.newScore === "" || log.newScore === null || log.newScore === undefined ? "" : escapeHtml(log.newScore)}</td>
+            <td class="log-device">${escapeHtml(log.device)}</td>
+        </tr>`;
+    }).join("");
+
+    container.innerHTML = `
+        <table class="logs-table">
+            <thead>
+                <tr>
+                    <th>時間</th><th>班級</th><th>動作</th><th>對象</th>
+                    <th>變動</th><th>變動後</th><th>裝置</th>
+                </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+        </table>
+    `;
+}
+
+// ==================== 重設分數／刪除班級 ==================== */
+
+function confirmResetScores() {
+    if (!state.currentClass || state.currentClass === "__new__") return;
+
+    openConfirm({
+        title: "重設分數",
+        message: `即將把「${state.currentClass}」全班 ${state.students.length} 位學生的分數歸零。學生姓名與座號會保留，但分數無法復原。`,
+        confirmText: "全部歸零",
+        onConfirm: () => {
+            const okBtn = document.getElementById("btn-confirm-ok");
+            setButtonLoading(okBtn, true);
+
+            callAPI({ action: "reset_scores", className: state.currentClass })
+                .then(res => {
+                    setButtonLoading(okBtn, false);
+                    if (res.success) {
+                        closeModal("modal-confirm");
+                        showToast(`已將 ${res.resetCount} 位學生的分數歸零`, "success");
+                        loadClassData(state.currentClass);
+                    } else {
+                        showToast("重設失敗: " + res.error, "error");
+                    }
+                })
+                .catch(err => {
+                    setButtonLoading(okBtn, false);
+                    showToast("網路錯誤，分數未重設", "error");
+                    console.error(err);
+                });
+        }
+    });
+}
+
+function confirmDeleteClass() {
+    if (!state.currentClass || state.currentClass === "__new__") return;
+
+    const target = state.currentClass;
+
+    openConfirm({
+        title: "刪除班級",
+        message: `即將永久刪除「${target}」，包含全部 ${state.students.length} 位學生的姓名與分數。此操作無法復原。`,
+        confirmText: "永久刪除",
+        requireTyped: target, // 必須逐字輸入班級名稱，避免誤觸
+        onConfirm: () => {
+            const okBtn = document.getElementById("btn-confirm-ok");
+            setButtonLoading(okBtn, true);
+
+            callAPI({ action: "delete_class", className: target })
+                .then(res => {
+                    setButtonLoading(okBtn, false);
+                    if (res.success) {
+                        closeModal("modal-confirm");
+                        showToast(`班級「${res.deleted}」已刪除`, "success");
+
+                        state.classes = res.classes;
+                        state.currentClass = null;
+                        renderClassTabs();
+                        switchClassTab(state.classes.length > 0 ? state.classes[0] : "__new__");
+                    } else {
+                        showToast("刪除失敗: " + res.error, "error");
+                    }
+                })
+                .catch(err => {
+                    setButtonLoading(okBtn, false);
+                    showToast("網路錯誤，班級未刪除", "error");
+                    console.error(err);
+                });
+        }
+    });
 }
 
 // ==================== TOAST & LOCAL STATE UTILS ==================== */
