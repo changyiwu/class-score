@@ -8,6 +8,11 @@ const GAS_API_URL = "https://script.google.com/macros/s/AKfycbwZeR2kvK84Tiaiueds
 // 不需附帶 session token 的動作（登入流程本身）
 const NO_SESSION_ACTIONS = new Set(["login", "create_pairing", "check_pairing"]);
 
+// 建立班級時的人數範圍（需與 index.html 的 min/max 及後端上限一致）
+const MIN_STUDENT_COUNT = 5;
+const MAX_STUDENT_COUNT = 50;
+const DEFAULT_STUDENT_COUNT = 30;
+
 // Global Application State
 const state = {
     sessionToken: null,
@@ -69,12 +74,20 @@ function setupEventListeners() {
     // New Class Student Count change updates seat list dynamically
     const studentCountInput = document.getElementById("input-student-count");
     if (studentCountInput) {
+        // 打字途中不修改輸入值，否則刪掉重打時游標會被跳走
         studentCountInput.addEventListener("input", (e) => {
+            const count = parseInt(e.target.value, 10);
+            if (isNaN(count) || count < 1 || count > MAX_STUDENT_COUNT) return;
+            renderVacantSeatsGrid(count);
+        });
+
+        // 離開欄位時才夾到合法範圍
+        studentCountInput.addEventListener("change", (e) => {
             let count = parseInt(e.target.value, 10);
-            if (isNaN(count)) return;
-            if (count > 50) e.target.value = 50;
-            if (count < 5) e.target.value = 5;
-            renderVacantSeatsGrid(parseInt(e.target.value, 10));
+            if (isNaN(count)) count = DEFAULT_STUDENT_COUNT;
+            count = Math.min(MAX_STUDENT_COUNT, Math.max(MIN_STUDENT_COUNT, count));
+            e.target.value = count;
+            renderVacantSeatsGrid(count);
         });
     }
 
@@ -123,9 +136,12 @@ function checkSessionAndInit() {
             })
             .catch(err => {
                 showLoading(false);
-                console.error("Network validation failed, using cached session", err);
-                // offline fallback if token is still valid by timestamp
-                enterSystem();
+                console.error("Session validation failed", err);
+                // 連不上後端時不要放行進主畫面，否則每個操作都會失敗且無從理解。
+                // 退回登入畫面即可，該畫面本身會每 5 秒自動重試建立通道。
+                showToast("無法連線至伺服器，請確認網路後重新登入", "error");
+                clearLocalSession();
+                showDesktopLogin();
             });
     } else {
         // No valid session, show login screen
@@ -209,7 +225,8 @@ function renderLoginQRCode() {
         });
     } catch (e) {
         console.error("Failed to generate QR Code, using backup rendering", e);
-        qrContainer.innerHTML = `<div style="padding:10px;color:black;background:white;font-size:12px;">無法載入 QR Code 庫，請造訪此連結進行授權:<br><a href="${loginUrl}" target="_blank" style="color:blue;word-break:break-all;">${loginUrl}</a></div>`;
+        const safeUrl = escapeHtml(loginUrl);
+        qrContainer.innerHTML = `<div style="padding:10px;color:black;background:white;font-size:12px;">無法載入 QR Code 庫，請造訪此連結進行授權:<br><a href="${safeUrl}" target="_blank" rel="noopener" style="color:blue;word-break:break-all;">${safeUrl}</a></div>`;
     }
 }
 
@@ -306,10 +323,11 @@ function startSessionTimer() {
 // General API request wrapper
 function callAPI(payload) {
     // Inject session token into all requests except the login flow itself
-    if (!NO_SESSION_ACTIONS.has(payload.action)) {
+    const isLoginFlow = NO_SESSION_ACTIONS.has(payload.action);
+    if (!isLoginFlow) {
         payload.session = state.sessionToken;
     }
-    
+
     return fetch(GAS_API_URL, {
         method: "POST",
         // Using plain text body to bypass CORS preflight OPTIONS requests
@@ -322,8 +340,11 @@ function callAPI(payload) {
         return res.json();
     })
     .then(data => {
-        // Handle Session Expiry (401 Unauthorized) returned by backend
-        if (data.code === 401) {
+        // Handle Session Expiry (401 Unauthorized) returned by backend.
+        // 登入流程本身不帶 session，若對它也觸發自動登出會造成
+        // performLogout → showDesktopLogin → create_pairing → 401 的無窮迴圈
+        // （例如後端尚未更新到支援配對通道的版本時）。
+        if (data.code === 401 && !isLoginFlow) {
             showToast("工作階段已失效，請重新登入！", "error");
             performLogout();
             throw new Error("Unauthorized");
@@ -614,7 +635,7 @@ function handleCreateClassSubmit(e) {
             
             // Clear form inputs
             classNameInput.value = "";
-            studentCountInput.value = "30";
+            studentCountInput.value = DEFAULT_STUDENT_COUNT;
             
             // Reload classes list and switch to the newly created class
             state.classes = res.classes;
@@ -665,15 +686,17 @@ function renderClassTabs() {
     state.classes.forEach(cls => {
         const btn = document.createElement("button");
         btn.className = "tab-btn";
+        btn.dataset.classTab = cls; // 以 data 屬性辨識，不依賴按鈕顯示文字
         if (state.currentClass === cls) btn.classList.add("active");
         btn.innerText = cls;
         btn.addEventListener("click", () => switchClassTab(cls));
         tabsContainer.appendChild(btn);
     });
-    
+
     // Add "+ New Class" tab button
     const newTabBtn = document.createElement("button");
     newTabBtn.className = "tab-btn tab-btn-new";
+    newTabBtn.dataset.classTab = "__new__";
     if (state.currentClass === "__new__") newTabBtn.classList.add("active");
     newTabBtn.innerHTML = `<i class="fa-solid fa-plus"></i> 新班級`;
     newTabBtn.addEventListener("click", () => switchClassTab("__new__"));
@@ -687,19 +710,18 @@ function switchClassTab(targetTab) {
     // Update tabs active state in DOM
     const buttons = document.querySelectorAll(".tab-btn");
     buttons.forEach(btn => {
-        btn.classList.remove("active");
-        if (btn.innerText === targetTab || (targetTab === "__new__" && btn.classList.contains("tab-btn-new"))) {
-            btn.classList.add("active");
-        }
+        btn.classList.toggle("active", btn.dataset.classTab === targetTab);
     });
-    
+
     const dashboard = document.getElementById("class-dashboard");
     const newClassPanel = document.getElementById("new-class-panel");
-    
+
     if (targetTab === "__new__") {
         dashboard.classList.add("hidden");
         newClassPanel.classList.remove("hidden");
-        renderVacantSeatsGrid(30); // Render seat select default 30
+        const countInput = document.getElementById("input-student-count");
+        const initialCount = parseInt(countInput && countInput.value, 10);
+        renderVacantSeatsGrid(isNaN(initialCount) ? DEFAULT_STUDENT_COUNT : initialCount);
     } else {
         newClassPanel.classList.add("hidden");
         dashboard.classList.remove("hidden");
@@ -734,9 +756,10 @@ function renderStudentGrid() {
         }
         
         // Only display name if it is custom (i.e. not the default "學生X")
+        // 姓名來自試算表，屬於外部輸入，插入前必須跳脫
         const isDefaultName = student.name === `學生${student.seat}`;
-        const nameHTML = isDefaultName ? "" : `<div class="student-name">${student.name}</div>`;
-        
+        const nameHTML = isDefaultName ? "" : `<div class="student-name">${escapeHtml(student.name)}</div>`;
+
         card.innerHTML = `
             <div class="student-seat">座號 ${student.seat}</div>
             ${nameHTML}
@@ -780,23 +803,37 @@ function renderVacantSeatsGrid(studentCount) {
 
 // ==================== TOAST & LOCAL STATE UTILS ==================== */
 
+// 將字串跳脫後才可安全插入 innerHTML
+function escapeHtml(value) {
+    return String(value === undefined || value === null ? "" : value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
+
 // Toast notification helper
 function showToast(message, type = "info") {
     const container = document.getElementById("toast-container");
     if (!container) return;
-    
+
     const toast = document.createElement("div");
     toast.className = `toast ${type}`;
-    
+
     let iconClass = "fa-circle-info";
     if (type === "success") iconClass = "fa-circle-check";
     if (type === "error") iconClass = "fa-circle-exclamation";
-    
-    toast.innerHTML = `
-        <i class="fa-solid ${iconClass}"></i>
-        <span>${message}</span>
-    `;
-    
+
+    const icon = document.createElement("i");
+    icon.className = `fa-solid ${iconClass}`;
+
+    const text = document.createElement("span");
+    text.textContent = message; // 訊息可能含後端回傳內容，一律以文字插入
+
+    toast.appendChild(icon);
+    toast.appendChild(text);
+
     container.appendChild(toast);
     
     // Trigger CSS slide-in
@@ -847,7 +884,7 @@ function updateTopThreeLeaderboard() {
     top3.forEach((student, idx) => {
         const displayName = student.name && student.name !== `學生${student.seat}` ? student.name : `座號 ${student.seat}`;
         let scoreText = student.score >= 0 ? `+${student.score}` : student.score;
-        html += `${medals[idx]}${displayName} (${scoreText}分)</span>`;
+        html += `${medals[idx]}${escapeHtml(displayName)} (${scoreText}分)</span>`;
     });
     
     container.innerHTML = html;

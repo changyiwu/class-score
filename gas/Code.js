@@ -96,14 +96,23 @@ function doGet(e) {
 
 // ==================== SPREADSHEET ACCESS ====================
 
+// 單次請求內的快取。GAS 每個請求都是全新的執行環境，因此不會跨請求殘留舊資料。
+var _spreadsheetCache = null;
+var _settingsCache = null;
+
 // Get or create the master spreadsheet
 function getSpreadsheet() {
+  if (_spreadsheetCache) {
+    return _spreadsheetCache;
+  }
+
   var properties = PropertiesService.getScriptProperties();
   var id = properties.getProperty("SPREADSHEET_ID");
 
   if (id) {
     try {
-      return SpreadsheetApp.openById(id);
+      _spreadsheetCache = SpreadsheetApp.openById(id);
+      return _spreadsheetCache;
     } catch (e) {
       // Spreadsheet ID might be invalid or deleted
       properties.deleteProperty("SPREADSHEET_ID");
@@ -115,7 +124,8 @@ function getSpreadsheet() {
   if (files.hasNext()) {
     var file = files.next();
     properties.setProperty("SPREADSHEET_ID", file.getId());
-    return SpreadsheetApp.openById(file.getId());
+    _spreadsheetCache = SpreadsheetApp.openById(file.getId());
+    return _spreadsheetCache;
   }
 
   // Create a new spreadsheet if not found
@@ -134,28 +144,40 @@ function getSpreadsheet() {
     ss.deleteSheet(defaultSheet);
   }
 
+  _spreadsheetCache = ss;
   return ss;
+}
+
+// 一次讀入整份 _Settings 並快取，避免同一請求內重複讀取試算表
+function getSettingsMap() {
+  if (_settingsCache) {
+    return _settingsCache;
+  }
+
+  var map = {};
+  try {
+    var sheet = getSpreadsheet().getSheetByName("_Settings");
+    if (sheet) {
+      var values = sheet.getDataRange().getValues();
+      for (var i = 1; i < values.length; i++) {
+        if (values[i][0]) {
+          map[values[i][0].toString().toLowerCase()] = values[i][1];
+        }
+      }
+    }
+  } catch (e) {
+    Logger.log("Error reading settings: " + e.toString());
+  }
+
+  _settingsCache = map;
+  return map;
 }
 
 // Retrieve setting from the _Settings sheet
 function getSetting(key, defaultValue) {
-  try {
-    var ss = getSpreadsheet();
-    var sheet = ss.getSheetByName("_Settings");
-    if (!sheet) {
-      return defaultValue;
-    }
-
-    var values = sheet.getDataRange().getValues();
-    for (var i = 1; i < values.length; i++) {
-      if (values[i][0] && values[i][0].toString().toLowerCase() === key.toLowerCase()) {
-        return values[i][1];
-      }
-    }
-  } catch (e) {
-    Logger.log("Error getting setting: " + e.toString());
-  }
-  return defaultValue;
+  var map = getSettingsMap();
+  var value = map[key.toString().toLowerCase()];
+  return (value === undefined || value === "") ? defaultValue : value;
 }
 
 // 讀取工作階段時長（分鐘），並限制在合理範圍內
