@@ -15,6 +15,21 @@ const PRAISE_WORDS = ["讚！", "太棒了！", "好厲害！", "很好！", "�
 const PRAISE_TINTS = ["#34d399", "#fbbf24", "#ffffff", "#22d3ee"];
 const PRAISE_STAR_COUNT = 12;
 
+// 加分音效：不想要就把這個改成 false（介面刻意不放開關，維持精簡）
+const PRAISE_SOUND_ENABLED = true;
+// 音符：[頻率, 起音延遲(秒), 衰減時長(秒), 相對音量]
+// 低音 C5 當鈴身撐出厚度與長度，上方 C6-E6-G6-C7 依序疊成上行琶音。
+// 越高的音相對音量越低，長衰減時才不會刺耳。總長約 1.25 秒，與鼓勵動畫等長
+const PRAISE_CHIME_NOTES = [
+    { freq: 523.25, delay: 0.00, decay: 1.35, gain: 0.55 },
+    { freq: 1046.5, delay: 0.00, decay: 1.20, gain: 1.00 },
+    { freq: 1318.5, delay: 0.11, decay: 1.20, gain: 0.90 },
+    { freq: 1568.0, delay: 0.22, decay: 1.15, gain: 0.80 },
+    { freq: 2093.0, delay: 0.33, decay: 1.05, gain: 0.65 }
+];
+const PRAISE_CHIME_VOLUME = 0.15;    // 保守音量，實際大小交給大螢幕的系統音量
+const PRAISE_SOUND_MIN_GAP_MS = 120; // 連點時的最小間隔；音效變長後要拉寬，否則疊音會爆表
+
 // 建立班級時的人數範圍（需與 index.html 的 min/max 及後端上限一致）
 const MIN_STUDENT_COUNT = 5;
 const MAX_STUDENT_COUNT = 50;
@@ -470,8 +485,11 @@ function changeScore(seatNumber, delta) {
     void scoreWrapper.offsetWidth; // Trigger reflow
     scoreWrapper.classList.add(pulseClass);
 
-    // 加分才播鼓勵動畫（扣分不慶祝）
-    if (delta > 0) playPraiseAnimation(card, delta);
+    // 加分才播鼓勵動畫與音效（扣分不慶祝）
+    if (delta > 0) {
+        playPraiseAnimation(card, delta);
+        playPraiseSound();
+    }
 
     // Update top three display instantly in the optimistic phase
     updateTopThreeLeaderboard();
@@ -566,6 +584,63 @@ function playPraiseAnimation(card, delta) {
         card.classList.remove("card-praise");
         card.removeEventListener("animationend", onEnd);
     });
+}
+
+// 加分音效以 Web Audio API 即時合成，不引入音檔也不依賴外部資源
+// （教室網路可能擋外部請求，且省去在 repo 放二進位檔）
+let praiseAudioCtx = null;
+let praiseSoundLastAt = 0;
+
+function getPraiseAudioContext() {
+    if (praiseAudioCtx) return praiseAudioCtx;
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return null; // 舊瀏覽器沒有 Web Audio 就靜靜不播，不影響加分本身
+    praiseAudioCtx = new Ctx();
+    return praiseAudioCtx;
+}
+
+function playPraiseSound() {
+    if (!PRAISE_SOUND_ENABLED) return;
+
+    // 連點時節流，否則多組琶音疊在一起會變噪音
+    const nowMs = performance.now();
+    if (nowMs - praiseSoundLastAt < PRAISE_SOUND_MIN_GAP_MS) return;
+    praiseSoundLastAt = nowMs;
+
+    const ctx = getPraiseAudioContext();
+    if (!ctx) return;
+    // 自動播放政策會讓 context 生成時處於 suspended；本函式只由點擊觸發，
+    // 屬於使用者手勢，可以安全恢復
+    if (ctx.state === "suspended") ctx.resume();
+
+    const now = ctx.currentTime;
+    const master = ctx.createGain();
+    master.gain.value = PRAISE_CHIME_VOLUME;
+    master.connect(ctx.destination);
+
+    let endsAt = 0;
+    PRAISE_CHIME_NOTES.forEach(note => {
+        const startAt = now + note.delay;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "triangle";
+        osc.frequency.value = note.freq;
+        // 兩段式包封：先快速落到延音位準，再拉長尾音。
+        // 單段指數衰減會在前 0.3 秒就掉到幾乎聽不見，時長參數調再大也沒有變長的感覺
+        gain.gain.setValueAtTime(0, startAt);
+        gain.gain.linearRampToValueAtTime(note.gain, startAt + 0.012);
+        gain.gain.exponentialRampToValueAtTime(note.gain * 0.35, startAt + 0.28);
+        gain.gain.exponentialRampToValueAtTime(note.gain * 0.02, startAt + note.decay);
+        gain.gain.linearRampToValueAtTime(0, startAt + note.decay + 0.06); // 收乾淨，避免尾巴爆音
+        osc.connect(gain);
+        gain.connect(master);
+        osc.start(startAt);
+        osc.stop(startAt + note.decay + 0.08);
+        endsAt = Math.max(endsAt, note.delay + note.decay + 0.08);
+    });
+
+    // 播完把 master 從 destination 卸掉，避免節點無限累積
+    setTimeout(() => master.disconnect(), endsAt * 1000 + 300);
 }
 
 // Handle login submission on phone (Mobile)
