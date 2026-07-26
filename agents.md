@@ -50,8 +50,17 @@ class-score/
 ## 技術規範
 
 ### 安全保護
-- 密碼存放於 Google 試算表 `_Settings` 分頁；後端以 `CacheService` 管理 session，時間上限 **45 分鐘**
+- 密碼存放於 Google 試算表 `_Settings` 分頁；後端以 `CacheService` 管理 session，時長由 `_Settings` 的 `SessionDurationMinutes` 決定（預設 45 分鐘，前端由登入回應取得，勿再硬編碼）
+- **登入採配對通道（pairing）機制**：大螢幕先向後端申請 `pairId`（放進 QR Code，視為公開）與 `pollKey`（僅留在大螢幕）。手機掃碼後只送出密碼，**手機端不會取得任何 session token**；token 由後端產生後存入配對通道，僅交付給握有 `pollKey` 的大螢幕，且只交付一次
+- **session token 一律由後端產生**（`Utilities.getUuid()`），前端不得自行產生
+- **登入具備防暴力破解**：單一配對通道密碼錯誤 5 次即作廢；全域 10 分鐘內失敗超過 15 次啟動 2 秒節流
+- 後端不提供任意查詢 session 是否有效的端點，避免被用於探測
 - 前端發送 API 請求時，**必須使用 `text/plain` 格式的 POST**，以避免引發 CORS preflight OPTIONS 預檢錯誤
+
+### 資料寫入
+- 所有「先讀後寫」的試算表操作（`handleUpdateScore`、`handleCreateClass`）**必須以 `LockService` 加鎖**，否則大螢幕連續點擊時併發請求會互相覆蓋而漏算分數
+- `update_score` 的單次變動量限制在 ±10 分以內
+- 班級名稱不可以 `_` 或 `'` 開頭，且不可含 `: \ / ? * [ ]`（試算表分頁名稱限制）；前後端皆須驗證
 
 ### UI/UX 設計
 - 保持現代暗色系設計（Glassmorphism 毛玻璃視覺效果）

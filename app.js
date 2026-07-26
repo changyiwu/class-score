@@ -5,10 +5,15 @@
 // backend Google Apps Script URL
 const GAS_API_URL = "https://script.google.com/macros/s/AKfycbwZeR2kvK84TiaiuedsCp0Q1DYw_oBk4tGhIBWeQBYeX3At5HxWqlRjPcQ_EfbsjM_qaA/exec";
 
+// 不需附帶 session token 的動作（登入流程本身）
+const NO_SESSION_ACTIONS = new Set(["login", "create_pairing", "check_pairing"]);
+
 // Global Application State
 const state = {
     sessionToken: null,
     sessionExpiry: null,
+    pairId: null,        // 登入配對通道 ID（公開，放在 QR Code 中）
+    pollKey: null,       // 領取 session token 的憑證（僅存於大螢幕）
     mode: 'desktop', // 'desktop' or 'mobile'
     classes: [],
     currentClass: null,
@@ -24,13 +29,13 @@ document.addEventListener("DOMContentLoaded", () => {
     
     // Determine route based on URL query parameters
     const urlParams = new URLSearchParams(window.location.search);
-    const sessionParam = urlParams.get("session");
+    const pairParam = urlParams.get("pair");
     const modeParam = urlParams.get("mode");
 
-    if (sessionParam && modeParam === "login") {
+    if (pairParam && modeParam === "login") {
         // MOBILE LOGIN MODE
         state.mode = 'mobile';
-        state.sessionToken = sessionParam;
+        state.pairId = pairParam;
         showMobileLogin();
     } else {
         // DESKTOP BIG SCREEN MODE
@@ -142,7 +147,7 @@ function enterSystem() {
 function showDesktopLogin() {
     document.getElementById("desktop-view").classList.add("hidden");
     document.getElementById("desktop-login-view").classList.remove("hidden");
-    
+
     // Clear direct desktop login password input and error message
     const desktopPasswordInput = document.getElementById("desktop-password");
     if (desktopPasswordInput) {
@@ -152,18 +157,47 @@ function showDesktopLogin() {
     if (desktopErrorEl) {
         desktopErrorEl.classList.add("hidden");
     }
-    
-    // Generate a fresh session token
-    state.sessionToken = generateSessionToken();
-    
-    // Generate URL for scanning (points to same site with params)
-    const loginUrl = `${window.location.origin}${window.location.pathname}?session=${state.sessionToken}&mode=login`;
-    console.log("Login URL generated for phone scan:", loginUrl);
-    
-    // Render QR Code
+
+    requestPairingChannel();
+}
+
+// 向後端申請登入配對通道，成功後才渲染 QR Code 並開始輪詢
+function requestPairingChannel() {
+    if (state.pollInterval) clearInterval(state.pollInterval);
+
+    state.pairId = null;
+    state.pollKey = null;
+
     const qrContainer = document.getElementById("qrcode-box");
-    qrContainer.innerHTML = ""; // Clear existing QR
-    
+    const statusText = document.getElementById("qr-status-text");
+    qrContainer.innerHTML = "";
+    if (statusText) statusText.innerText = "正在建立安全登入通道...";
+
+    callAPI({ action: "create_pairing" })
+        .then(res => {
+            if (!res.success) {
+                throw new Error(res.error || "建立登入通道失敗");
+            }
+            state.pairId = res.pairId;
+            state.pollKey = res.pollKey;
+            renderLoginQRCode();
+            startLoginStatusPolling();
+        })
+        .catch(err => {
+            console.error("Failed to create pairing channel", err);
+            if (statusText) statusText.innerText = "無法連線至伺服器，5 秒後重試...";
+            setTimeout(requestPairingChannel, 5000);
+        });
+}
+
+// 依目前的配對通道渲染 QR Code
+function renderLoginQRCode() {
+    // QR Code 只帶 pairId；領取 token 用的 pollKey 不會離開這台大螢幕
+    const loginUrl = `${window.location.origin}${window.location.pathname}?pair=${state.pairId}&mode=login`;
+
+    const qrContainer = document.getElementById("qrcode-box");
+    qrContainer.innerHTML = "";
+
     try {
         new QRCode(qrContainer, {
             text: loginUrl,
@@ -177,9 +211,6 @@ function showDesktopLogin() {
         console.error("Failed to generate QR Code, using backup rendering", e);
         qrContainer.innerHTML = `<div style="padding:10px;color:black;background:white;font-size:12px;">無法載入 QR Code 庫，請造訪此連結進行授權:<br><a href="${loginUrl}" target="_blank" style="color:blue;word-break:break-all;">${loginUrl}</a></div>`;
     }
-    
-    // Start Polling backend for login status
-    startLoginStatusPolling();
 }
 
 // Show Mobile Login UI
@@ -191,34 +222,55 @@ function showMobileLogin() {
 
 // ==================== POLLING & TIMERS ==================== */
 
-// Poll status of current session (Desktop)
+// Poll pairing status (Desktop)
 function startLoginStatusPolling() {
     if (state.pollInterval) clearInterval(state.pollInterval);
-    
+
     const statusText = document.getElementById("qr-status-text");
     statusText.innerText = "等待手機掃描登入中...";
-    
+
     state.pollInterval = setInterval(() => {
-        // Call backend via lightweight GET request
-        fetch(`${GAS_API_URL}?action=check_session&session=${state.sessionToken}`)
-            .then(res => res.json())
+        // 記下發送當下的通道，稍後用來忽略「回應抵達時通道已換過或已登入」的過期結果
+        const requestPairId = state.pairId;
+
+        callAPI({
+            action: "check_pairing",
+            pairId: state.pairId,
+            pollKey: state.pollKey
+        })
             .then(data => {
-                if (data.success && data.authenticated) {
+                if (state.pairId !== requestPairId) return; // 過期回應，忽略
+
+                if (data.expired) {
+                    // 通道逾時或已被使用，重新申請一組
                     clearInterval(state.pollInterval);
-                    
-                    // Session authorized! Cache it locally
-                    const expiry = Date.now() + 45 * 60 * 1000; // 45 minutes
-                    localStorage.setItem("session_token", state.sessionToken);
-                    localStorage.setItem("session_expiry", expiry.toString());
-                    
-                    state.sessionExpiry = expiry;
-                    
+                    requestPairingChannel();
+                    return;
+                }
+                if (data.success && data.authenticated && data.session) {
+                    clearInterval(state.pollInterval);
+                    storeSession(data.session, data.expiresInMinutes);
                     showToast("授權登入成功！", "success");
                     enterSystem();
                 }
             })
             .catch(err => console.error("Polling error: ", err));
     }, 3000);
+}
+
+// 儲存後端核發的 session token 與到期時間
+function storeSession(sessionToken, expiresInMinutes) {
+    const minutes = parseInt(expiresInMinutes, 10);
+    const durationMs = (isNaN(minutes) || minutes <= 0 ? 45 : minutes) * 60 * 1000;
+    const expiry = Date.now() + durationMs;
+
+    state.sessionToken = sessionToken;
+    state.sessionExpiry = expiry;
+    state.pairId = null;
+    state.pollKey = null;
+
+    localStorage.setItem("session_token", sessionToken);
+    localStorage.setItem("session_expiry", expiry.toString());
 }
 
 // Session countdown timer (Desktop)
@@ -253,8 +305,8 @@ function startSessionTimer() {
 
 // General API request wrapper
 function callAPI(payload) {
-    // Inject session token into all requests unless it is login
-    if (payload.action !== "login") {
+    // Inject session token into all requests except the login flow itself
+    if (!NO_SESSION_ACTIONS.has(payload.action)) {
         payload.session = state.sessionToken;
     }
     
@@ -423,22 +475,28 @@ function handleMobileLoginSubmit(e) {
     callAPI({
         action: "login",
         password: password,
-        session: state.sessionToken
+        pairId: state.pairId
     })
     .then(res => {
         submitBtn.disabled = false;
         btnText.classList.remove("hidden");
         btnSpinner.classList.add("hidden");
-        
+
         if (res.success) {
-            // Login successful! Update UI to success screen
+            // 授權成功。手機端不會取得任何憑證，token 由大螢幕自行領取
             document.getElementById("mobile-login-form-container").classList.add("hidden");
             document.getElementById("mobile-success-container").classList.remove("hidden");
         } else {
             errorEl.classList.remove("hidden");
             errorEl.querySelector("span").innerText = res.error;
             passwordInput.value = "";
-            passwordInput.focus();
+
+            if (res.expired) {
+                // 通道已失效，繼續嘗試也沒有意義
+                submitBtn.disabled = true;
+            } else {
+                passwordInput.focus();
+            }
         }
     })
     .catch(err => {
@@ -469,34 +527,36 @@ function handleDesktopLoginSubmit(e) {
     btnText.classList.add("hidden");
     btnSpinner.classList.remove("hidden");
     
+    // 大螢幕直接登入時附帶 pollKey，向後端證明自己就是發起此登入通道的裝置
     callAPI({
         action: "login",
         password: password,
-        session: state.sessionToken
+        pairId: state.pairId,
+        pollKey: state.pollKey
     })
     .then(res => {
         submitBtn.disabled = false;
         btnText.classList.remove("hidden");
         btnSpinner.classList.add("hidden");
-        
-        if (res.success) {
+
+        if (res.success && res.session) {
             // Stop polling
             if (state.pollInterval) clearInterval(state.pollInterval);
-            
-            // Cache session locally
-            const expiry = Date.now() + 45 * 60 * 1000; // 45 minutes
-            localStorage.setItem("session_token", state.sessionToken);
-            localStorage.setItem("session_expiry", expiry.toString());
-            
-            state.sessionExpiry = expiry;
-            
+
+            storeSession(res.session, res.expiresInMinutes);
+
             showToast("登入成功！", "success");
             enterSystem();
         } else {
             errorEl.classList.remove("hidden");
-            errorEl.querySelector("span").innerText = res.error;
+            errorEl.querySelector("span").innerText = res.error || "登入失敗，請重試";
             passwordInput.value = "";
             passwordInput.focus();
+
+            if (res.expired) {
+                // 通道已失效，重新申請一組並更新 QR Code
+                requestPairingChannel();
+            }
         }
     })
     .catch(err => {
@@ -510,6 +570,16 @@ function handleDesktopLoginSubmit(e) {
     });
 }
 
+// 檢查班級名稱是否可作為試算表分頁名稱（規則需與後端 validateClassName 一致）
+function validateClassName(name) {
+    if (!name) return "請輸入班級名稱";
+    if (name.length > 15) return "班級名稱請勿超過 15 個字";
+    if (name.startsWith("_")) return "班級名稱不可以底線「_」開頭，此為系統保留";
+    if (name.startsWith("'")) return "班級名稱不可以單引號「'」開頭";
+    if (/[:\\\/\?\*\[\]]/.test(name)) return "班級名稱不可包含 : \\ / ? * [ ] 等字元";
+    return null;
+}
+
 // Handle New Class Creation (Desktop)
 function handleCreateClassSubmit(e) {
     const classNameInput = document.getElementById("input-class-name");
@@ -517,9 +587,15 @@ function handleCreateClassSubmit(e) {
     
     const className = classNameInput.value.trim();
     const totalStudents = parseInt(studentCountInput.value, 10);
-    
-    if (!className) return;
-    
+
+    // 與後端一致的班級名稱檢查，先在前端擋掉以便即時提示
+    const nameError = validateClassName(className);
+    if (nameError) {
+        showToast(nameError, "error");
+        classNameInput.focus();
+        return;
+    }
+
     // Collect vacant seats checkboxes
     const vacantCheckboxes = document.querySelectorAll("#vacant-seats-grid input[type='checkbox']:checked");
     const vacantSeats = Array.from(vacantCheckboxes).map(cb => parseInt(cb.value, 10));
@@ -704,15 +780,6 @@ function renderVacantSeatsGrid(studentCount) {
 
 // ==================== TOAST & LOCAL STATE UTILS ==================== */
 
-// Generate temporary high entropy session token
-function generateSessionToken() {
-    if (window.crypto && window.crypto.randomUUID) {
-        return window.crypto.randomUUID();
-    }
-    // Fallback if UUID not supported
-    return 'sess_' + Math.random().toString(36).substring(2, 15) + '_' + Date.now().toString(36);
-}
-
 // Toast notification helper
 function showToast(message, type = "info") {
     const container = document.getElementById("toast-container");
@@ -748,7 +815,9 @@ function clearLocalSession() {
     localStorage.removeItem("session_expiry");
     state.sessionToken = null;
     state.sessionExpiry = null;
-    
+    state.pairId = null;
+    state.pollKey = null;
+
     if (state.timerInterval) clearInterval(state.timerInterval);
     if (state.pollInterval) clearInterval(state.pollInterval);
 }
