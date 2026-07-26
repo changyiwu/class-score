@@ -80,9 +80,6 @@ function doPost(e) {
       case "update_score":
         return handleUpdateScore(request.className, request.seatNumber, request.scoreChange, session);
 
-      case "update_class_seats":
-        return handleUpdateClassSeats(request.className, request.seats, session);
-
       case "get_logs":
         return handleGetLogs(request.className, request.limit);
 
@@ -411,8 +408,10 @@ function getLogSheet() {
  */
 function appendLog(action, className, seat, name, delta, newScore, session) {
   try {
+    var sheet = getLogSheet();
     var device = session ? session.toString().substring(0, 8) : "";
-    getLogSheet().appendRow([
+
+    sheet.appendRow([
       new Date(),
       className || "",
       (seat === undefined || seat === null) ? "" : seat,
@@ -422,46 +421,15 @@ function appendLog(action, className, seat, name, delta, newScore, session) {
       (newScore === undefined || newScore === null) ? "" : newScore,
       device
     ]);
-  } catch (e) {
-    Logger.log("appendLog failed: " + e.toString());
-  }
-}
 
-// 一次寫入多筆紀錄（批次改名時使用，避免逐列 appendRow）
-function appendLogRows(rows) {
-  if (!rows || !rows.length) return;
-  try {
-    var sheet = getLogSheet();
-    sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, 8).setValues(rows);
-  } catch (e) {
-    Logger.log("appendLogRows failed: " + e.toString());
-  }
-}
-
-// 建立一列紀錄資料（供批次寫入使用）
-function buildLogRow(action, className, seat, name, delta, newScore, session) {
-  return [
-    new Date(),
-    className || "",
-    (seat === undefined || seat === null) ? "" : seat,
-    name || "",
-    action,
-    (delta === undefined || delta === null) ? "" : delta,
-    (newScore === undefined || newScore === null) ? "" : newScore,
-    session ? session.toString().substring(0, 8) : ""
-  ];
-}
-
-// 紀錄過多時從最舊的開始裁切，避免試算表無限膨脹
-function trimLogIfNeeded() {
-  try {
-    var sheet = getLogSheet();
+    // 順帶控制紀錄總量。目前只剩加減分與建立班級會寫入，
+    // 在這裡一併處理即可，不必另外設觸發器。
     var dataRows = sheet.getLastRow() - 1; // 扣掉標題列
     if (dataRows > LOG_MAX_ROWS) {
-      sheet.deleteRows(2, LOG_TRIM_BATCH);
+      sheet.deleteRows(2, LOG_TRIM_BATCH); // 從最舊的開始裁切
     }
   } catch (e) {
-    Logger.log("trimLogIfNeeded failed: " + e.toString());
+    Logger.log("appendLog failed: " + e.toString());
   }
 }
 
@@ -724,135 +692,6 @@ function handleUpdateScore(className, seatNumber, scoreChange, session) {
       className: className,
       seatNumber: seatNumber,
       newScore: newScore
-    });
-  } finally {
-    lock.releaseLock();
-  }
-}
-
-/**
- * 調整既有班級的座號組成——新增或移除座號。
- *
- * seats 為「調整後應該存在的完整座號清單」，後端據此比對現況：
- *   - 清單中有、目前沒有 → 新增（姓名為預設「學生N」、分數 0）
- *   - 目前有、清單中沒有 → 移除（該生的姓名與分數一併消失，不可復原）
- *   - 兩邊都有 → 原封不動保留姓名與分數
- *
- * 作法是整批重寫資料列而非逐列插刪：先把現況讀進 map，組出新的完整列陣列後
- * 一次寫回。這樣順便讓座號保持由小到大排列，也避免多次 insertRow/deleteRow
- * 造成的效能問題與列號位移錯誤。
- */
-function handleUpdateClassSeats(className, seats, session) {
-  if (!className) {
-    return jsonResponse({ success: false, error: "Missing class name" });
-  }
-  if (!seats || !seats.length) {
-    return jsonResponse({ success: false, error: "班級至少要保留一個座號" });
-  }
-
-  // 正規化：轉整數、去重、排序、過濾超出範圍者
-  var desired = [];
-  var seen = {};
-  for (var i = 0; i < seats.length; i++) {
-    var seat = parseInt(seats[i], 10);
-    if (isNaN(seat) || seat < 1 || seat > MAX_SEAT_NUMBER) continue;
-    if (seen[seat]) continue;
-    seen[seat] = true;
-    desired.push(seat);
-  }
-  desired.sort(function(a, b) { return a - b; });
-
-  if (desired.length === 0) {
-    return jsonResponse({ success: false, error: "沒有有效的座號" });
-  }
-
-  var lock = LockService.getScriptLock();
-  try {
-    lock.waitLock(LOCK_TIMEOUT_MS);
-  } catch (e) {
-    return jsonResponse({ success: false, error: "系統忙碌中，請稍後再試" });
-  }
-
-  try {
-    var sheet = getSpreadsheet().getSheetByName(className);
-    if (!sheet) {
-      return jsonResponse({ success: false, error: "Class not found" });
-    }
-
-    // 讀入現況：座號 → { name, score }
-    var data = sheet.getDataRange().getValues();
-    var existing = {};
-    for (var r = 1; r < data.length; r++) {
-      var s = parseInt(data[r][0], 10);
-      if (isNaN(s)) continue;
-      var sc = parseInt(data[r][2], 10);
-      existing[s] = {
-        name: data[r][1] ? data[r][1].toString() : ("學生" + s),
-        score: isNaN(sc) ? 0 : sc
-      };
-    }
-
-    // 比對出新增與移除的座號
-    var added = [];
-    var removed = [];
-    for (var d = 0; d < desired.length; d++) {
-      if (!existing[desired[d]]) added.push(desired[d]);
-    }
-    for (var key in existing) {
-      if (!existing.hasOwnProperty(key)) continue;
-      if (!seen[parseInt(key, 10)]) removed.push(parseInt(key, 10));
-    }
-    removed.sort(function(a, b) { return a - b; });
-
-    if (added.length === 0 && removed.length === 0) {
-      return jsonResponse({
-        success: true,
-        className: className,
-        added: [],
-        removed: [],
-        totalSeats: desired.length
-      });
-    }
-
-    // 組出調整後的完整資料列，保留留任學生的姓名與分數
-    var rows = desired.map(function(seat) {
-      var prev = existing[seat];
-      return prev ? [seat, prev.name, prev.score]
-                  : [seat, "學生" + seat, 0];
-    });
-
-    // 先清掉舊的資料列（保留標題列），再一次寫入新的
-    var oldRowCount = sheet.getLastRow() - 1;
-    if (oldRowCount > 0) {
-      sheet.getRange(2, 1, oldRowCount, 3).clearContent();
-    }
-    sheet.getRange(2, 1, rows.length, 3).setValues(rows);
-
-    // 座號變少時要把多出來的列真的刪掉，只清內容會留下一堆空白列
-    if (oldRowCount > rows.length) {
-      sheet.deleteRows(2 + rows.length, oldRowCount - rows.length);
-    }
-    SpreadsheetApp.flush();
-
-    // 逐筆記錄，移除的座號連同當時分數一起留存以便追溯
-    var logRows = [];
-    added.forEach(function(seat) {
-      logRows.push(buildLogRow("新增座號", className, seat, "學生" + seat, "", 0, session));
-    });
-    removed.forEach(function(seat) {
-      var prev = existing[seat];
-      logRows.push(buildLogRow("移除座號", className, seat, prev ? prev.name : "",
-                               "", prev ? prev.score : "", session));
-    });
-    appendLogRows(logRows);
-    trimLogIfNeeded();
-
-    return jsonResponse({
-      success: true,
-      className: className,
-      added: added,
-      removed: removed,
-      totalSeats: desired.length
     });
   } finally {
     lock.releaseLock();

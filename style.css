@@ -1104,109 +1104,6 @@ input[type="text"]:focus, input[type="number"]:focus, input[type="password"]:foc
     border-top: 1px solid var(--border-glass);
 }
 
-.btn-danger {
-    background: linear-gradient(135deg, #f43f5e, #be123c);
-    color: #fff;
-}
-
-.btn-danger:hover {
-    filter: brightness(1.1);
-}
-
-.btn-danger:active {
-    transform: scale(0.98);
-}
-
-/* ==================== SEAT EDITOR ==================== */
-.text-danger { color: var(--accent-red); }
-
-.seats-range {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    flex-wrap: wrap;
-    margin-bottom: 4px;
-}
-
-.seats-range label {
-    font-size: 0.9rem;
-    color: var(--text-secondary);
-}
-
-.seats-range input {
-    width: 90px;
-    padding: 8px 10px;
-    font-family: var(--font-body);
-    font-size: 0.95rem;
-    color: var(--text-primary);
-    background: rgba(0, 0, 0, 0.25);
-    border: 1px solid var(--border-glass);
-    border-radius: var(--border-radius-sm);
-}
-
-.seats-range input:focus {
-    outline: none;
-    border-color: var(--accent-blue);
-}
-
-.seats-range-hint {
-    font-size: 0.8rem;
-    color: var(--text-muted);
-}
-
-.seats-edit-grid {
-    max-height: 300px;
-}
-
-/* 座號編輯器的語意與「建立班級」的空缺選擇相反：
-   勾選 = 該座號存在（亮起），未勾選 = 該座號不存在（暗下） */
-.seats-edit-grid .vacant-label {
-    background: rgba(255, 255, 255, 0.03);
-    border-style: dashed;
-    color: var(--text-muted);
-    opacity: 0.55;
-}
-
-.seats-edit-grid .vacant-box input[type="checkbox"]:checked + .vacant-label {
-    background: rgba(6, 182, 212, 0.15);
-    border-style: solid;
-    border-color: var(--accent-blue);
-    color: var(--text-primary);
-    opacity: 1;
-}
-
-/* 原本就有、這次被取消的座號＝即將刪除資料，標成紅色警示。
-   此狀態必為未勾選，不會與上面的 :checked 規則相衝。 */
-.seats-edit-grid .vacant-box.seat-removing .vacant-label {
-    background: rgba(244, 63, 94, 0.12);
-    border-color: var(--accent-red);
-    border-style: solid;
-    color: var(--accent-red);
-    opacity: 1;
-    text-decoration: line-through;
-}
-
-/* 這次新增的座號＝將建立新資料，標成綠色。
-   新增的座號必為勾選狀態，選擇器要一併帶上 :checked 才壓得過上面那條，
-   否則權重相同會被藍色蓋掉。 */
-.seats-edit-grid .vacant-box.seat-adding input[type="checkbox"]:checked + .vacant-label {
-    background: rgba(16, 185, 129, 0.15);
-    border-style: solid;
-    border-color: var(--accent-green);
-    color: var(--accent-green);
-    opacity: 1;
-}
-
-.seats-summary {
-    margin-top: 14px;
-    font-size: 0.88rem;
-    line-height: 1.8;
-    color: var(--text-secondary);
-}
-
-.seats-summary .summary-add    { color: var(--accent-green); font-weight: 600; }
-.seats-summary .summary-remove { color: var(--accent-red);   font-weight: 600; }
-
 /* ==================== LOGS ==================== */
 .logs-toolbar {
     margin-bottom: 14px;
@@ -1275,14 +1172,7 @@ input[type="text"]:focus, input[type="number"]:focus, input[type="password"]:foc
     margin-bottom: 12px;
 }
 
-/* ==================== CONFIRM DIALOG ==================== */
-#confirm-message {
-    color: var(--text-secondary);
-    line-height: 1.7;
-}
-
 @media (max-width: 768px) {
     .modal-overlay { padding: 12px; }
     .class-stats { justify-content: flex-start; }
-    .seats-range-hint { flex-basis: 100%; }
 }
