@@ -8,6 +8,13 @@ const GAS_API_URL = "https://script.google.com/macros/s/AKfycbwZeR2kvK84Tiaiueds
 // 不需附帶 session token 的動作（登入流程本身）
 const NO_SESSION_ACTIONS = new Set(["login", "create_pairing", "check_pairing"]);
 
+// 加分時隨機挑一句飄出的鼓勵詞（只在加分播放，扣分維持低調的 pulse）
+const PRAISE_WORDS = ["讚！", "太棒了！", "好厲害！", "很好！", "繼續加油！", "做得好！", "超讚！"];
+
+// 星星迸發的配色（綠／金／白／青，混色比單色更熱鬧）
+const PRAISE_TINTS = ["#34d399", "#fbbf24", "#ffffff", "#22d3ee"];
+const PRAISE_STAR_COUNT = 12;
+
 // 建立班級時的人數範圍（需與 index.html 的 min/max 及後端上限一致）
 const MIN_STUDENT_COUNT = 5;
 const MAX_STUDENT_COUNT = 50;
@@ -457,11 +464,15 @@ function changeScore(seatNumber, delta) {
     if (newScore > 0) scoreValEl.classList.add("positive");
     if (newScore < 0) scoreValEl.classList.add("negative");
     
-    // Pulse animation
-    scoreWrapper.classList.remove("score-pulse");
+    // Pulse animation（加分用彈跳幅度較大的版本，扣分維持原本低調的 pulse）
+    const pulseClass = delta > 0 ? "score-pulse-up" : "score-pulse";
+    scoreWrapper.classList.remove("score-pulse", "score-pulse-up");
     void scoreWrapper.offsetWidth; // Trigger reflow
-    scoreWrapper.classList.add("score-pulse");
-    
+    scoreWrapper.classList.add(pulseClass);
+
+    // 加分才播鼓勵動畫（扣分不慶祝）
+    if (delta > 0) playPraiseAnimation(card, delta);
+
     // Update top three display instantly in the optimistic phase
     updateTopThreeLeaderboard();
     
@@ -505,6 +516,55 @@ function changeScore(seatNumber, delta) {
         
         showToast("網路錯誤，更新失敗！", "error");
         console.error(err);
+    });
+}
+
+// 加分鼓勵動畫：飄升的鼓勵詞＋分數、星星迸發、卡片綠色光暈
+// 每次點擊都建立獨立的圖層，播完自行移除，所以大螢幕連點時不會互相打斷
+function playPraiseAnimation(card, delta) {
+    // 尊重系統的「減少動態效果」設定
+    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+    const word = PRAISE_WORDS[Math.floor(Math.random() * PRAISE_WORDS.length)];
+
+    // 每顆星的方向、距離、大小、自轉、顏色、時長都錯開，散射才不會看起來像機械式的圓
+    const stars = Array.from({ length: PRAISE_STAR_COUNT }, (_, i) => {
+        const angle = i * (360 / PRAISE_STAR_COUNT) + (i % 2 ? 12 : -6);
+        const dist = 56 + (i % 3) * 24;                        // 56 / 80 / 104 px 三層
+        const size = [0.55, 0.8, 1.05][i % 3];
+        const spin = (i % 2 ? 1 : -1) * (180 + (i % 4) * 90);
+        const tint = PRAISE_TINTS[i % PRAISE_TINTS.length];
+        const dur = 0.8 + (i % 3) * 0.15;
+        return `<i class="praise-star fa-solid fa-star" style="--angle:${angle}deg; --dist:${dist}px; --size:${size}rem; --spin:${spin}deg; --tint:${tint}; --dur:${dur}s"></i>`;
+    }).join("");
+
+    const layer = document.createElement("div");
+    layer.className = "praise-layer";
+    layer.innerHTML = `
+        <span class="praise-ring"></span>
+        <span class="praise-ring praise-ring-late"></span>
+        <span class="praise-burst">${stars}</span>
+        <span class="praise-float">
+            <span class="praise-word">${word}</span>
+            <span class="praise-delta">+${delta}</span>
+        </span>
+    `;
+    card.appendChild(layer);
+
+    // 動畫最長 1.25 秒，稍留餘裕後移除
+    setTimeout(() => layer.remove(), 1400);
+
+    // 卡片彈跳＋光暈（重設 class 以便連點時能重播）
+    card.classList.remove("card-praise");
+    void card.offsetWidth; // Trigger reflow
+    card.classList.add("card-praise");
+
+    // 播完就拿掉，別讓 .card-praise 的 z-index: 10 永久留在卡片上。
+    // 子元素的動畫也會冒泡到這裡，故須比對 animationName
+    card.addEventListener("animationend", function onEnd(e) {
+        if (e.animationName !== "card-praise") return;
+        card.classList.remove("card-praise");
+        card.removeEventListener("animationend", onEnd);
     });
 }
 
