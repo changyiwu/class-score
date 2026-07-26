@@ -73,6 +73,20 @@
                         </div>
                         <div class="class-stats">
                             <span class="stat-badge"><i class="fa-solid fa-users"></i> 學生人數: <span id="stat-student-count">0</span> 人</span>
+                            <div class="class-actions">
+                                <button type="button" id="btn-edit-names" class="action-btn" title="編輯學生姓名">
+                                    <i class="fa-solid fa-user-pen"></i> 編輯姓名
+                                </button>
+                                <button type="button" id="btn-view-logs" class="action-btn" title="查看操作紀錄">
+                                    <i class="fa-solid fa-clock-rotate-left"></i> 操作紀錄
+                                </button>
+                                <button type="button" id="btn-reset-scores" class="action-btn" title="將本班分數全部歸零">
+                                    <i class="fa-solid fa-arrow-rotate-left"></i> 重設分數
+                                </button>
+                                <button type="button" id="btn-delete-class" class="action-btn action-btn-danger" title="刪除整個班級">
+                                    <i class="fa-solid fa-trash"></i> 刪除班級
+                                </button>
+                            </div>
                         </div>
                     </div>
                     <div id="student-grid" class="student-grid">
@@ -203,6 +217,85 @@
                     </div>
                     <h3>授權成功！</h3>
                     <p>大螢幕已完成登入，您可以關閉此手機視窗並開始在大螢幕操作加減分。</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== MODAL: 編輯學生姓名 ==================== -->
+        <div id="modal-names" class="modal-overlay hidden">
+            <div class="modal modal-lg">
+                <div class="modal-header">
+                    <h3><i class="fa-solid fa-user-pen"></i> 編輯學生姓名</h3>
+                    <button type="button" class="modal-close" data-close-modal="modal-names" aria-label="關閉">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <p class="modal-hint">
+                        留空即還原為預設名稱，卡片會退回只顯示座號。座號與分數不會被更動。
+                    </p>
+                    <div id="names-edit-grid" class="names-edit-grid">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-close-modal="modal-names">取消</button>
+                    <button type="button" id="btn-save-names" class="btn btn-primary">
+                        <span class="btn-text"><i class="fa-solid fa-check"></i> 儲存姓名</span>
+                        <div class="btn-spinner hidden"></div>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== MODAL: 操作紀錄 ==================== -->
+        <div id="modal-logs" class="modal-overlay hidden">
+            <div class="modal modal-lg">
+                <div class="modal-header">
+                    <h3><i class="fa-solid fa-clock-rotate-left"></i> 操作紀錄</h3>
+                    <button type="button" class="modal-close" data-close-modal="modal-logs" aria-label="關閉">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="logs-toolbar">
+                        <label class="logs-scope">
+                            <input type="checkbox" id="logs-all-classes">
+                            <span>顯示所有班級（預設只看目前班級）</span>
+                        </label>
+                    </div>
+                    <div id="logs-content" class="logs-content">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-close-modal="modal-logs">關閉</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== MODAL: 通用確認 ==================== -->
+        <div id="modal-confirm" class="modal-overlay hidden">
+            <div class="modal">
+                <div class="modal-header">
+                    <h3 id="confirm-title"><i class="fa-solid fa-triangle-exclamation"></i> 請確認</h3>
+                    <button type="button" class="modal-close" data-close-modal="modal-confirm" aria-label="關閉">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <p id="confirm-message"></p>
+                    <div id="confirm-typed-wrapper" class="confirm-typed hidden">
+                        <label for="confirm-typed-input">請輸入 <strong id="confirm-typed-target"></strong> 以確認：</label>
+                        <input type="text" id="confirm-typed-input" autocomplete="off">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-close-modal="modal-confirm">取消</button>
+                    <button type="button" id="btn-confirm-ok" class="btn btn-danger">
+                        <span class="btn-text">確認執行</span>
+                        <div class="btn-spinner hidden"></div>
+                    </button>
                 </div>
             </div>
         </div>
