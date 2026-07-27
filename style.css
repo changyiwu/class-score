@@ -177,10 +177,11 @@ body {
     gap: 12px;
 }
 .logo-icon {
-    font-size: 1.8rem;
-    background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
+    display: block;
+    width: 56px;
+    height: 56px;
+    object-fit: contain;
+    filter: drop-shadow(0 4px 10px rgba(99, 102, 241, 0.35));
 }
 .logo-text {
     font-family: var(--font-heading);
@@ -798,17 +799,12 @@ input[type="text"]:focus, input[type="number"]:focus, input[type="password"]:foc
 }
 
 .login-logo {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 64px;
-    height: 64px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, var(--accent-blue) 0%, var(--accent-purple) 100%);
-    color: white;
-    font-size: 2rem;
-    margin-bottom: 20px;
-    box-shadow: 0 4px 14px rgba(139, 92, 246, 0.3);
+    display: block;
+    width: 112px;
+    height: 112px;
+    object-fit: contain;
+    margin: 0 auto 16px;
+    filter: drop-shadow(0 8px 22px rgba(99, 102, 241, 0.4));
 }
 
 .login-header h1 {
