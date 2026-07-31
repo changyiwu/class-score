@@ -21,3 +21,6 @@ temp/
 
 # Claude Code 本機開發設定（不進版控）
 .claude/
+
+# 交接檔含真實電腦名與本機路徑，只走雲端硬碟同步，不進公開 repo
+handoff.md
