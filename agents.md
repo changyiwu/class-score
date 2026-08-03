@@ -72,6 +72,36 @@ class-score/
 
 **本檔不要出現的東西**：❌ `## 最近進度`／逐次工作紀錄、❌ 決策理由與踩坑完整版。歷史寫 L3 筆記的〈🗓️ 最近更動紀錄〉〈🧠 決策紀錄〉〈🕳️ 踩坑筆記〉；踩過的坑只把**結論**收斂成一條祈使句寫進〈工作約定〉，原因留 L3。
 
+## 專案專屬規則
+
+以下都是**長期有效**的約束，違反會壞掉、測不出來或悄悄失效。完整成因見 L3 筆記。
+
+### 部署與驗證
+
+- **更新 GAS 一定要 `clasp redeploy <既有 deploymentId>`**，不可用 `clasp deploy`（會產生新網址）。部署 ID：`AKfycbwZeR2kvK84TiaiuedsCp0Q1DYw_oBk4tGhIBWeQBYeX3At5HxWqlRjPcQ_EfbsjM_qaA`；clasp 版本 **3.3.0**（`redeploy` ＝ `update-deployment`）
+- **驗證線上版本要直接抓檔案比對**，別信 GitHub Pages 的 builds API——它曾延遲數分鐘仍回報舊 commit
+- **前後端協定綁在一起**：改動 action 時 `clasp push + redeploy` 與 `git push` 必須一起做
+- 用 curl 測 GAS `/exec` 會被 302 轉址擋掉，**改用瀏覽器測**
+- **需登入的 action 無法從外部驗證**：未帶 session 一律回 401，分不出「action 存在但沒權限」與「action 不存在」
+- 前端 API 請求維持 `text/plain` POST，避免 CORS preflight
+
+### 本機測試
+
+- **本機測前端要先繞過登入**：Console 移除 `#desktop-view` 的 `hidden`、灌假 `state.students` 再 `renderStudentGrid()`。注意路由邏輯會把 `hidden` 加回去，導致版面塌成 0 寬、**幾何量測全變 0**
+- 可用 `.claude/launch.json` 的靜態伺服器（已 gitignore，port 8777）；預覽窗格會快取 `app.js`，直接開 `file://` 常拿到舊版
+- **Agent 環境測不到動畫的「動」**：窗格沒顯示時頁面被節流，CSS 動畫時間軸不前進、`animationend` 不派送、截圖 timeout。驗幾何用 `document.getAnimations()` 手動設 `currentTime`，驗事件處理器用合成 `AnimationEvent`。**音訊不受此限**，AudioContext 照常跑
+- **`card.getAnimations()` 不含子元素動畫**，要加 `{subtree: true}`——曾誤用而讓一項測試變成空測
+
+### 音效
+
+- **音效長度不是把衰減時長調大就會變長**：單段指數衰減在前 0.3 秒就掉到幾乎聽不見（衰減 0.34→0.95 秒，可聽長度只從 0.52 變 0.68 秒）。要延長得改成**兩段式包封**（先落到 35% 延音位準，再拉長尾音）
+- **改音效長度必須重測連點疊音峰值**確認不削波，並同步拉寬 `PRAISE_SOUND_MIN_GAP_MS`
+
+### 範圍與資料
+
+- **功能面是刻意縮減的，不是還沒做完**。曾實作過編輯姓名／重設分數／刪除班級／編輯座號，全部移除；要取回實作翻 commit `337d759`、`659c00b`
+- **`_Log` 的裁切邏輯在 `appendLog` 內**（超過 5000 筆刪最舊 500 筆）。若改成批次寫入要自行補上裁切
+
 ## 工作約定
 - 任何 Agent、任何電腦：**開工先讀 `handoff.md`，收工必更新 `handoff.md`**
 - 修改共用檔案前先讀最新內容，避免覆蓋其他 Agent 的變更
