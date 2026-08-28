@@ -27,3 +27,7 @@ handoff.md
 
 # 資訊圖表的生圖原檔（每張數 MB，成品已在 infographics/*.png，要重生看 spec 即可）
 infographics/source/
+
+# 雲端硬碟同步下來的試算表／指令碼捷徑（含 doc id 與 script id），只留在本機不進公開 repo
+ClassScoreDB.gsheet
+ClassScoreBackend.gscript

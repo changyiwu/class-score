@@ -8,7 +8,7 @@
 ## 關鍵時程
 - 專案開發與部署：已完成並發布上線
 - 2026-07-26：安全性與健壯性大修（GAS `@5`）→ 新增操作紀錄（`@6`）→ 功能面縮減，只保留操作紀錄（**目前部署版本 `@7`**）→ 加分鼓勵動畫＋加分音效（純前端，GAS 維持 `@7`）
-- 2026-08-28：分數與操作紀錄匯出 CSV ＋ 三張課堂資訊圖表與頁首入口（皆純前端，GAS 維持 `@7`）
+- 2026-08-28：分數與操作紀錄匯出 CSV ＋ 三張課堂資訊圖表與頁首入口（皆純前端，GAS 維持 `@7`）→ 雲端資產（試算表＋GAS 專案）由雲端硬碟根目錄搬進專案資料夾
 
 ## 目標與路線圖
 - [x] 後端 Google Apps Script API 設計與 clasp 部署
@@ -56,7 +56,9 @@ class-score/
 ├── infographics/    # 課堂資訊圖表：成品 png、spec、提示詞紀錄、檢視頁
 │   └── source/      # 生圖原檔（已 gitignore，不進版控）
 ├── vendor/
-└── gas/
+├── gas/
+├── ClassScoreDB.gsheet        # 雲端硬碟同步下來的試算表捷徑（已 gitignore）
+└── ClassScoreBackend.gscript  # 雲端硬碟同步下來的 GAS 專案捷徑（已 gitignore）
 ```
 
 ## 同步層級（本專案初始化至第 3 層級）
@@ -92,6 +94,12 @@ class-score/
 - **需登入的 action 無法從外部驗證**：未帶 session 一律回 401，分不出「action 存在但沒權限」與「action 不存在」
 - 前端 API 請求維持 `text/plain` POST，避免 CORS preflight
 
+### 雲端資產位置
+
+- **試算表 `ClassScoreDB`（`1y4OiKj6JoT4yAnSph3P5W3hFOSHAUyoivyMUmHLsm-4`）與 GAS 專案 `ClassScoreBackend` 都放在雲端硬碟的 `agents/class-score/` 資料夾內**，與程式碼同一處
+- **搬動這兩個檔案不影響運作**：clasp 認 `scriptId`、後端取試算表走 `openById`（找不到才用檔名全 Drive 搜尋），都與資料夾位置無關，搬完不必 redeploy
+- **GAS 專案是獨立式的**（不是綁在試算表裡），所以它與試算表是兩個各自獨立的 Drive 檔案，搬動時要分別處理
+
 ### 本機測試
 
 - **本機測前端要先繞過登入**：Console 移除 `#desktop-view` 的 `hidden`、灌假 `state.students` 再 `renderStudentGrid()`。注意路由邏輯會把 `hidden` 加回去，導致版面塌成 0 寬、**幾何量測全變 0**
@@ -124,6 +132,7 @@ class-score/
 - **`baked` 模式的數字由生圖模型繪製，沒有防呆**。改動任何比例或數值後**必須重新逐字核對整張圖**，不像 `plate` 模式由程式疊字、改了就一定對
 - 圖片一律透過 `infographics/index.html` 檢視頁呈現，**不要讓頁首按鈕直接連 png**——檢視頁用 `max-width` 與 `max-height` 同時夾住圖片，才不會在小螢幕出現橫向捲動
 - 生圖原檔放 `infographics/source/`（已 gitignore）；版控只留成品 png、spec 與提示詞紀錄，spec 在手就能重生
+- **`paper_warm` 偏好的 jf open 粉圓／GenSenRounded TW 字型本機沒裝**。目前是 `baked` 模式、字由生圖模型畫，不受影響；但若改回 `plate` 模式用程式疊字，字型會退回微軟正黑體
 
 ## 工作約定
 - 任何 Agent、任何電腦：**開工先讀 `handoff.md`，收工必更新 `handoff.md`**
@@ -180,3 +189,4 @@ class-score/
 ### 版本控制
 - 不要將敏感的 OAuth token 或認證金鑰提交至 Git
 - `gas/.clasp.json` 含腳本 ID，可提交；但個人認證檔 `~/.clasprc.json` 必須留在使用者主目錄，**絕不能進入專案目錄**
+- **雲端硬碟同步下來的捷徑檔 `ClassScoreDB.gsheet`／`ClassScoreBackend.gscript` 不進版控**（已 gitignore）：內容是 doc id 與 script id，repo 公開不必外流。日後再把雲端檔搬進專案資料夾，記得同步補 gitignore
