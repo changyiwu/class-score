@@ -198,7 +198,7 @@ body {
     padding: 4px;
     border-radius: var(--border-radius-sm);
     border: 1px solid var(--border-glass);
-    max-width: 60vw;
+    max-width: 40vw; /* 讓出寬度給頁首右側的資訊圖表連結，否則 1080p 上會擠掉登出鈕 */
     overflow-x: auto;
     scrollbar-width: none; /* Hide scrollbar for clean tab look */
 }
@@ -242,6 +242,18 @@ body {
     display: flex;
     align-items: center;
     gap: 16px;
+}
+
+/* 頁首的資訊圖表連結：沿用 .action-btn 外觀，另外抵銷 a 標籤的底線 */
+.header-links {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.header-links .action-btn {
+    text-decoration: none;
+    line-height: 1;
 }
 
 .timer-badge {
