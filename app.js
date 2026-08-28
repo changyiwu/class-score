@@ -45,6 +45,7 @@ const state = {
     classes: [],
     currentClass: null,
     students: [],
+    currentLogs: [],   // 紀錄視窗當下載入的那批，供匯出 CSV 使用
     timerInterval: null,
     pollInterval: null
 };
@@ -140,8 +141,14 @@ function setupClassActionListeners() {
     const viewLogsBtn = document.getElementById("btn-view-logs");
     if (viewLogsBtn) viewLogsBtn.addEventListener("click", openLogsViewer);
 
+    const exportScoresBtn = document.getElementById("btn-export-scores");
+    if (exportScoresBtn) exportScoresBtn.addEventListener("click", exportScoresCsv);
+
     const logsScope = document.getElementById("logs-all-classes");
     if (logsScope) logsScope.addEventListener("change", loadLogs);
+
+    const exportLogsBtn = document.getElementById("btn-export-logs");
+    if (exportLogsBtn) exportLogsBtn.addEventListener("click", exportLogsCsv);
 }
 
 // 對話框共用行為：關閉鈕、點背景關閉、Esc 關閉
@@ -993,6 +1000,7 @@ function loadLogs() {
     const allClasses = document.getElementById("logs-all-classes").checked;
 
     container.innerHTML = `<div class="logs-empty"><div class="spinner"></div>載入紀錄中...</div>`;
+    state.currentLogs = [];
 
     callAPI({
         action: "get_logs",
@@ -1004,7 +1012,8 @@ function loadLogs() {
             container.innerHTML = `<div class="logs-empty"><i class="fa-solid fa-circle-exclamation"></i>載入失敗：${escapeHtml(res.error)}</div>`;
             return;
         }
-        renderLogs(res.logs || []);
+        state.currentLogs = res.logs || [];
+        renderLogs(state.currentLogs);
     })
     .catch(err => {
         container.innerHTML = `<div class="logs-empty"><i class="fa-solid fa-plug-circle-xmark"></i>無法連線至伺服器</div>`;
@@ -1055,6 +1064,88 @@ function renderLogs(logs) {
             <tbody>${rows}</tbody>
         </table>
     `;
+}
+
+// ==================== CSV 匯出 ==================== */
+
+// CSV 欄位跳脫：含逗號／雙引號／換行時以雙引號包起，內部雙引號加倍。
+// 另擋 CSV 注入：以 = + - @ 或 tab／CR 開頭的字串會被 Excel 當公式執行，前置單引號使其維持純文字。
+// 但純數字要放行，否則扣分的 -3 會被加上單引號變成文字，Excel 無法加總
+function csvEscapeCell(value) {
+    let text = String(value === undefined || value === null ? "" : value);
+    const isPlainNumber = /^-?\d+(\.\d+)?$/.test(text);
+    if (!isPlainNumber && /^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+    if (/[",\r\n]/.test(text)) text = `"${text.replace(/"/g, '""')}"`;
+    return text;
+}
+
+// rows 為二維陣列（第一列是表頭），輸出 CRLF 換行的 CSV 字串
+function buildCsv(rows) {
+    return rows.map(row => row.map(csvEscapeCell).join(",")).join("\r\n");
+}
+
+// 觸發瀏覽器下載。開頭必須補 UTF-8 BOM，否則 Excel 開啟時中文會變亂碼
+function downloadCsv(fileName, csvText) {
+    const blob = new Blob(["\uFEFF" + csvText], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    // 立即 revoke 在部分瀏覽器會讓下載中斷，延後釋放
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// 檔名用的本地時間戳 yyyymmdd-HHmm
+function csvTimestamp() {
+    const d = new Date();
+    const pad = n => String(n).padStart(2, "0");
+    return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}`;
+}
+
+// 班級名稱可能含檔名不允許的字元，清乾淨再用
+function safeFileNamePart(name) {
+    const cleaned = String(name === undefined || name === null ? "" : name)
+        .replace(/[\\/:*?"<>|]/g, "_")
+        .trim();
+    return cleaned || "class";
+}
+
+// 匯出目前班級的分數表（用畫面上已載入的資料，不再打 API）
+function exportScoresCsv() {
+    if (!state.currentClass || state.currentClass === "__new__") return;
+
+    if (state.students.length === 0) {
+        showToast("此班級沒有學生資料，無法匯出", "error");
+        return;
+    }
+
+    const rows = [["座號", "姓名", "分數"]];
+    state.students.forEach(student => rows.push([student.seat, student.name, student.score]));
+
+    downloadCsv(`${safeFileNamePart(state.currentClass)}_分數_${csvTimestamp()}.csv`, buildCsv(rows));
+    showToast(`已匯出 ${state.students.length} 筆分數`, "success");
+}
+
+// 匯出操作紀錄（沿用紀錄視窗當下載入的那批，範圍與筆數上限跟著畫面走）
+function exportLogsCsv() {
+    if (state.currentLogs.length === 0) {
+        showToast("目前沒有可匯出的紀錄", "error");
+        return;
+    }
+
+    const rows = [["時間", "班級", "動作", "座號", "姓名", "變動", "變動後分數", "操作裝置"]];
+    state.currentLogs.forEach(log => rows.push([
+        log.time, log.className, log.action, log.seat, log.name, log.delta, log.newScore, log.device
+    ]));
+
+    const allClasses = document.getElementById("logs-all-classes").checked;
+    const scope = allClasses ? "全部班級" : safeFileNamePart(state.currentClass);
+
+    downloadCsv(`${scope}_操作紀錄_${csvTimestamp()}.csv`, buildCsv(rows));
+    showToast(`已匯出 ${state.currentLogs.length} 筆紀錄`, "success");
 }
 
 // ==================== TOAST & LOCAL STATE UTILS ==================== */

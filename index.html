@@ -75,6 +75,9 @@
                         <div class="class-stats">
                             <span class="stat-badge"><i class="fa-solid fa-users"></i> 學生人數: <span id="stat-student-count">0</span> 人</span>
                             <div class="class-actions">
+                                <button type="button" id="btn-export-scores" class="action-btn" title="將目前班級的分數匯出成 CSV">
+                                    <i class="fa-solid fa-file-arrow-down"></i> 匯出 CSV
+                                </button>
                                 <button type="button" id="btn-view-logs" class="action-btn" title="查看操作紀錄">
                                     <i class="fa-solid fa-clock-rotate-left"></i> 操作紀錄
                                 </button>
@@ -226,6 +229,9 @@
                             <input type="checkbox" id="logs-all-classes">
                             <span>顯示所有班級（預設只看目前班級）</span>
                         </label>
+                        <button type="button" id="btn-export-logs" class="action-btn" title="將目前列出的紀錄匯出成 CSV">
+                            <i class="fa-solid fa-file-arrow-down"></i> 匯出 CSV
+                        </button>
                     </div>
                     <div id="logs-content" class="logs-content">
                         <!-- Populated dynamically -->
