@@ -57,7 +57,9 @@ const state = {
     infographicCache: {},  // key -> { dataUri, alt }，同一次登入內只跟後端要一次
     infographicPending: null,  // 目前等待中的圖表 key，用來丟棄過期的回應
     timerInterval: null,
-    pollInterval: null
+    pollInterval: null,
+    pairingRetryTimer: null,  // 配對通道失敗後的重試計時器，重新進入登入畫面時要清掉
+    pairingEpoch: 0           // 每次重新申請通道就 +1，用來作廢還在飛行中的舊請求
 };
 
 // Initial setup
@@ -252,9 +254,26 @@ function showDesktopLogin() {
     requestPairingChannel();
 }
 
+// 前 PAIRING_FAST_RETRY 次用退避快速重試，之後才退回固定 5 秒。
+// 有些失敗不到一秒就會好（例如剛登出重新導向時 fetch 被導覽中斷），
+// 一律等滿 5 秒會讓大螢幕白白空著；但退避次數用完後仍要無限重試——
+// 大螢幕是無人看顧的裝置，網路晚幾分鐘恢復時它必須自己好。
+const PAIRING_FAST_RETRY = 4;
+const PAIRING_SLOW_RETRY_MS = 5000;
+
 // 向後端申請登入配對通道，成功後才渲染 QR Code 並開始輪詢
-function requestPairingChannel() {
+function requestPairingChannel(attempt) {
+    attempt = attempt || 0;
+
     if (state.pollInterval) clearInterval(state.pollInterval);
+    // 手動回到登入畫面時可能已有一輪重試在排隊，不清掉會疊成兩條計時鏈
+    if (state.pairingRetryTimer) clearTimeout(state.pairingRetryTimer);
+
+    // clearTimeout 取消得了「已排程」的重試，取消不了「還在飛行中」的請求——
+    // 它的 .catch 之後仍會排一條新的鏈，.then 更糟：過期的成功回應會把
+    // pairId 覆蓋成舊通道，QR 就對不上真正在輪詢的那一條。用世代編號作廢舊回應。
+    state.pairingEpoch = (state.pairingEpoch || 0) + 1;
+    const epoch = state.pairingEpoch;
 
     state.pairId = null;
     state.pollKey = null;
@@ -262,10 +281,13 @@ function requestPairingChannel() {
     const qrContainer = document.getElementById("qrcode-box");
     const statusText = document.getElementById("qr-status-text");
     qrContainer.innerHTML = "";
-    if (statusText) statusText.innerText = "正在建立安全登入通道...";
+    if (statusText) {
+        statusText.innerText = attempt ? "連線失敗，重試中..." : "正在建立安全登入通道...";
+    }
 
     callAPI({ action: "create_pairing" })
         .then(res => {
+            if (epoch !== state.pairingEpoch) return;   // 已被更新的一輪取代，丟棄
             if (!res.success) {
                 throw new Error(res.error || "建立登入通道失敗");
             }
@@ -275,9 +297,15 @@ function requestPairingChannel() {
             startLoginStatusPolling();
         })
         .catch(err => {
+            if (epoch !== state.pairingEpoch) return;
             console.error("Failed to create pairing channel", err);
-            if (statusText) statusText.innerText = "無法連線至伺服器，5 秒後重試...";
-            setTimeout(requestPairingChannel, 5000);
+            const fast = attempt < PAIRING_FAST_RETRY;
+            if (statusText && !fast) {
+                statusText.innerText = "無法連線至伺服器，持續重試中...";
+            }
+            state.pairingRetryTimer = setTimeout(function () {
+                requestPairingChannel(attempt + 1);
+            }, fast ? 800 * Math.pow(2, attempt) : PAIRING_SLOW_RETRY_MS);
         });
 }
 
