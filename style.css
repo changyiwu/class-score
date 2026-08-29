@@ -1323,7 +1323,44 @@ input[type="text"]:focus, input[type="number"]:focus, input[type="password"]:foc
     margin-bottom: 12px;
 }
 
+/* ==================== 課堂資訊圖表 ==================== */
+.modal-infographic {
+    max-width: min(880px, 92vw);
+}
+
+.infographic-body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 220px;
+}
+
+/* 圖是 1:1 的大圖，必須同時被寬與高夾住才不會在筆電螢幕上被迫捲動 */
+.infographic-image {
+    display: block;
+    width: auto;
+    height: auto;
+    max-width: 100%;
+    max-height: calc(88vh - 190px);
+    border-radius: var(--border-radius-sm);
+}
+
+.infographic-status {
+    text-align: center;
+    color: var(--text-secondary);
+    padding: 30px 10px;
+    line-height: 1.7;
+}
+
+.infographic-status .spinner {
+    margin: 0 auto 14px;
+}
+
 @media (max-width: 768px) {
     .modal-overlay { padding: 12px; }
     .class-stats { justify-content: flex-start; }
+}
+
+@media (max-width: 768px) {
+    .infographic-image { max-height: calc(88vh - 160px); }
 }

@@ -35,6 +35,14 @@ const MIN_STUDENT_COUNT = 5;
 const MAX_STUDENT_COUNT = 50;
 const DEFAULT_STUDENT_COUNT = 30;
 
+// 課堂資訊圖表。圖檔與無障礙描述都不在本 repo：描述含教師個人資料，
+// 一律隨圖從後端取回；key 必須與 GAS 的 INFOGRAPHIC_FILES 白名單一致。
+const INFOGRAPHICS = {
+    "teacher-profile": { title: "教師簡歷" },
+    "teaching-flow": { title: "教學流程" },
+    "grading": { title: "學期成績計算方法" }
+};
+
 // Global Application State
 const state = {
     sessionToken: null,
@@ -46,6 +54,8 @@ const state = {
     currentClass: null,
     students: [],
     currentLogs: [],   // 紀錄視窗當下載入的那批，供匯出 CSV 使用
+    infographicCache: {},  // key -> { dataUri, alt }，同一次登入內只跟後端要一次
+    infographicPending: null,  // 目前等待中的圖表 key，用來丟棄過期的回應
     timerInterval: null,
     pollInterval: null
 };
@@ -149,6 +159,10 @@ function setupClassActionListeners() {
 
     const exportLogsBtn = document.getElementById("btn-export-logs");
     if (exportLogsBtn) exportLogsBtn.addEventListener("click", exportLogsCsv);
+
+    document.querySelectorAll("[data-infographic]").forEach(btn => {
+        btn.addEventListener("click", () => openInfographic(btn.dataset.infographic));
+    });
 }
 
 // 對話框共用行為：關閉鈕、點背景關閉、Esc 關閉
@@ -987,6 +1001,77 @@ function closeModal(id) {
     if (el) el.classList.add("hidden");
 }
 
+// ==================== 課堂資訊圖表 ==================== */
+
+// 圖檔不在本 repo，一律向後端要；後端沒驗過 session 就不會給。
+function openInfographic(key) {
+    var meta = INFOGRAPHICS[key];
+    if (!meta) return;
+
+    document.getElementById("infographic-title").innerText = meta.title;
+    openModal("modal-infographic");
+
+    // 連點不同按鈕時，只認最後一次點擊的結果，避免先發的請求後到而蓋掉畫面
+    state.infographicPending = key;
+
+    var cached = state.infographicCache[key];
+    if (cached) {
+        showInfographicImage(cached);
+        return;
+    }
+
+    setInfographicState("loading");
+
+    callAPI({ action: "get_infographic", key: key })
+        .then(function (res) {
+            if (state.infographicPending !== key) return;
+
+            if (!res.success) {
+                setInfographicState("error", res.error || "無法載入圖表");
+                return;
+            }
+
+            // 後端只會回自家圖檔，但 mime 直接進 data URI，仍先擋掉非圖片與帶分號的值
+            var mime = String(res.mimeType || "");
+            if (mime.indexOf("image/") !== 0 || mime.indexOf(";") >= 0) {
+                setInfographicState("error", "圖表格式不正確");
+                return;
+            }
+
+            var loaded = {
+                dataUri: "data:" + mime + ";base64," + res.data,
+                alt: typeof res.alt === "string" && res.alt ? res.alt : meta.title
+            };
+            state.infographicCache[key] = loaded;
+            showInfographicImage(loaded);
+        })
+        .catch(function (err) {
+            console.error("get_infographic failed", err);
+            if (state.infographicPending !== key) return;
+            setInfographicState("error", "載入圖表失敗，請確認網路後再試一次。");
+        });
+}
+
+function showInfographicImage(loaded) {
+    var img = document.getElementById("infographic-image");
+    img.src = loaded.dataUri;
+    img.alt = loaded.alt;
+    setInfographicState("image");
+}
+
+// which：loading／error／image，三者互斥
+function setInfographicState(which, message) {
+    var loading = document.getElementById("infographic-loading");
+    var error = document.getElementById("infographic-error");
+    var img = document.getElementById("infographic-image");
+
+    loading.classList.toggle("hidden", which !== "loading");
+    error.classList.toggle("hidden", which !== "error");
+    img.classList.toggle("hidden", which !== "image");
+
+    if (which === "error") error.innerText = message || "";
+}
+
 // ==================== 操作紀錄 ==================== */
 
 function openLogsViewer() {
@@ -1201,6 +1286,8 @@ function clearLocalSession() {
     state.sessionExpiry = null;
     state.pairId = null;
     state.pollKey = null;
+    state.infographicCache = {};
+    state.infographicPending = null;
 
     if (state.timerInterval) clearInterval(state.timerInterval);
     if (state.pollInterval) clearInterval(state.pollInterval);

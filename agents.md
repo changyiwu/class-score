@@ -7,8 +7,9 @@
 
 ## 關鍵時程
 - 專案開發與部署：已完成並發布上線
-- 2026-07-26：安全性與健壯性大修（GAS `@5`）→ 新增操作紀錄（`@6`）→ 功能面縮減，只保留操作紀錄（**目前部署版本 `@7`**）→ 加分鼓勵動畫＋加分音效（純前端，GAS 維持 `@7`）
+- 2026-07-26：安全性與健壯性大修（GAS `@5`）→ 新增操作紀錄（`@6`）→ 功能面縮減，只保留操作紀錄（`@7`）→ 加分鼓勵動畫＋加分音效（純前端，GAS 維持 `@7`）
 - 2026-08-28：分數與操作紀錄匯出 CSV ＋ 三張課堂資訊圖表與頁首入口（皆純前端，GAS 維持 `@7`）→ 雲端資產（試算表＋GAS 專案）由雲端硬碟根目錄搬進專案資料夾 → 教學流程與成績計算兩張圖補上立體插圖
+- 2026-08-29：資訊圖表改為登入後才看得到——圖檔壓成 WebP 移出公開 repo、改放 Drive 私有資料夾，新增 `get_infographic`（**目前部署版本 GAS `@8`**），前端刪掉獨立檢視頁改用 modal；公開 repo 的 git 歷史已改寫、移除三張 png
 
 ## 目標與路線圖
 - [x] 後端 Google Apps Script API 設計與 clasp 部署
@@ -33,6 +34,8 @@
 - [x] 分數與操作紀錄匯出 CSV（純前端，用畫面已載入的資料）
 - [x] 三張課堂資訊圖表（教師簡歷／教學流程／學期成績計算）與頁首入口
 - [x] 教學流程與成績計算兩張圖補上立體插圖，豐富度對齊教師簡歷
+- [x] 資訊圖表改為真正的存取控制：圖檔與 alt 移出公開 repo 放 Drive 私有資料夾，由 GAS 驗證 session 後供圖，前端改用 modal 呈現
+- [x] 公開 repo 清除教師個資：`infographics/` 整個退出版控，改寫 git 歷史並重建 GitHub repo
 - [ ] 加分鼓勵動畫**真人視覺確認**（節奏感與吵雜度只能親眼看，Agent 環境測不到）
 - [ ] 加分音效**真人試聽**（音色與音量好不好聽只能親耳判斷）
 - [ ] 資訊圖表內容與插圖**本人確認**（簡歷是教師個人資料，Agent 無從查證對錯；插圖選得對不對、夠不夠豐富也只能親眼看）
@@ -54,8 +57,11 @@ class-score/
 ├── index.html
 ├── style.css
 ├── assets/          # 品牌圖示（logo 兼 favicon）
-├── infographics/    # 課堂資訊圖表：成品 png、spec、提示詞紀錄、檢視頁
-│   └── source/      # 生圖原檔（已 gitignore，不進版控）
+├── infographics/    # 課堂資訊圖表（**整個目錄已 gitignore**，含個資，只靠雲端硬碟同步保存）
+│   ├── private/     # 供圖用的 webp 與 meta.json，同步成 Drive 私有資料夾
+│   ├── prompts/     # 提示詞紀錄
+│   ├── source/      # 生圖原檔與原始 png
+│   └── *.spec.yaml  # 重生用的規格
 ├── vendor/
 ├── gas/
 ├── ClassScoreDB.gsheet        # 雲端硬碟同步下來的試算表捷徑（已 gitignore）
@@ -131,13 +137,21 @@ class-score/
 - 用 `yaml-infographic` 技能產生，風格固定 `global:paper_warm@1.2.0`（紙感立體貼紙、暖色淺底）
 - **畫布固定 1:1 1024×1024**：`baked` 模式的文字是生在圖上的，**事後裁切會切到字**，尺寸必須一次吻合技能允許的比例，而 1024×1024 是生圖模型原生尺寸中唯一精確吻合的
 - **`baked` 模式的數字由生圖模型繪製，沒有防呆**。改動任何比例或數值後**必須重新逐字核對整張圖**，不像 `plate` 模式由程式疊字、改了就一定對
-- **重生後除了核對文字，還要回頭檢查 `index.html` 與 spec 的 alt 文字是否仍屬實**：無障礙宣稱綁的是畫面實況（例如「以卡片寬度表達比例」），重生一次就可能不再成立
+- **重生後除了核對文字，還要回頭檢查 `infographics/private/meta.json` 與 spec 的 alt 文字是否仍屬實**：無障礙宣稱綁的是畫面實況（例如「以卡片寬度表達比例」），重生一次就可能不再成立
 - **圖示的 brief 必須明講「完全留白、不得有任何字母、數字或符號」**：不寫的話生圖模型會自己在計分紙上畫「A+」、在時鐘上畫刻度數字，違反 `baked` 只准出現指定文字的規則
 - **要求鮮豔配色時，必須把範圍限縮在「圖示本體」並聲明卡片底板維持奶白**：只說「飽和色」會讓模型把標題底板整塊染成深藍，破壞 `paper_warm` 的暖紙風格
 - **標題的 title 與 note 兩行要明講「同留在底板上」**：否則模型會把其中一行搬去當連接線上的標籤，順手把原本該在那個位置的字串吃掉（曾讓「每階段」整個消失）
 - **Claude Code 沒有內建生圖，走 `agent-draw` 技能的 `draw.py`**；提示詞很長且含引號，要用小腳本讀檔案再送進去，不要從 shell 展開。中文要零錯，`--quality` 用 `high`
-- 圖片一律透過 `infographics/index.html` 檢視頁呈現，**不要讓頁首按鈕直接連 png**——檢視頁用 `max-width` 與 `max-height` 同時夾住圖片，才不會在小螢幕出現橫向捲動
-- 生圖原檔放 `infographics/source/`（已 gitignore）；版控只留成品 png、spec 與提示詞紀錄，spec 在手就能重生
+- **整個 `infographics/` 目錄都不進版控**（已 gitignore）。裡面的 spec 與提示詞含教師個人資料（學歷、兵役、服務單位），這個 repo 是公開的，放進來就等於公開。目錄本體靠雲端硬碟同步保存，不靠 git
+- **供圖的是 `infographics/private/`**，經雲端硬碟桌面同步成為 Drive 私有資料夾（權限只有擁有者）。前端要圖一律走 `get_infographic`，後端驗過 session 才回 base64
+- **圖片的 alt 文字放在 `infographics/private/meta.json`，隨圖從 Drive 取回，絕不可寫進前端或 repo**：教師簡歷那段 alt 本身就是個資。`app.js` 的 `INFOGRAPHICS` 只准放標題
+- **供圖的 Drive 資料夾 ID 寫在 `gas/Code.js` 的 `INFOGRAPHIC_FOLDER_ID`**（`1HJY9LryVVcMAd9kikx2_G5800W2fyE7D`）。它不是密鑰——資料夾權限只有擁有者，部署設定又是 `executeAs: USER_DEPLOYING`，外人拿到 ID 也開不了
+- **`get_infographic` 的 key 必須走 `INFOGRAPHIC_FILES` 白名單**，且要用 `hasOwnProperty` 檢查。**絕不可**把前端傳來的字串直接當檔名，否則任何登入者都能讀出該資料夾內的任意檔案
+- **換圖或加圖要四處同步**：Drive 資料夾放檔、`meta.json` 補 alt、`gas/Code.js` 的 `INFOGRAPHIC_FILES` 加對應、`app.js` 的 `INFOGRAPHICS` 加標題。key 四處必須一致
+- **`meta.json` 讀不到或壞掉只會少了 alt，不該讓圖開不起來**（`readInfographicAlt` 一律回空字串，前端退回用標題當 alt）
+- **圖檔一律先壓成 WebP q85 再放進 Drive**：1024×1024 的 `paper_warm` 圖從 1.5 MB 掉到 80–95 KB（PSNR 約 38 dB，放大檢查小字與插圖皆無損），base64 後約 100 KB，GAS 回一趟很輕。直接送 PNG 會讓每次開圖都等上好幾秒
+- **圖片顯示在主程式的 `#modal-infographic`，不再有獨立檢視頁**。`.infographic-image` 必須同時被 `max-width` 與 `max-height: calc(88vh - 190px)` 夾住，否則 1366×768 的筆電上 modal 會超出畫面
+- **同一次登入內圖只抓一次**（`state.infographicCache`），登出時由 `clearLocalSession` 清掉。連點不同按鈕時用 `state.infographicPending` 丟棄較早的回應，避免先發後到蓋掉畫面
 - **`paper_warm` 偏好的 jf open 粉圓／GenSenRounded TW 字型本機沒裝**。目前是 `baked` 模式、字由生圖模型畫，不受影響；但若改回 `plate` 模式用程式疊字，字型會退回微軟正黑體
 
 ## 工作約定
@@ -171,7 +185,7 @@ class-score/
 
 ### UI/UX 設計
 - 保持現代暗色系設計（Glassmorphism 毛玻璃視覺效果）
-- **頁首寬度是有預算的**：`.tabs-container` 的 `max-width` 設為 `40vw`，是為了讓出空間給右側的資訊圖表連結、計時器與登出鈕。再往頁首加東西前，先在 1920 與 1366 兩種寬度量過不會擠掉登出鈕
+- **頁首寬度是有預算的**：`.tabs-container` 的 `max-width` 設為 `40vw`，是為了讓出空間給右側的資訊圖表按鈕、計時器與登出鈕。再往頁首加東西前，先在 1920 與 1366 兩種寬度量過不會擠掉登出鈕
 - 學生卡片調整分數時採**樂觀更新**（Optimistic Update），加入放大／縮小與綠／紅變色動畫
 - **加減分的回饋刻意不對稱**：加分播完整鼓勵動畫（`playPraiseAnimation`：12 顆星迸發＋雙層震波環＋卡片彈跳＋飄升鼓勵詞，分數用 `score-pulse-up`），扣分只留原本低調的 `score-pulse`，不慶祝
 - 鼓勵動畫的圖層 `z-index` 必須高於 `.updating` 的載入遮罩（2）與轉圈（3），否則送出請求那 1 秒動畫會被遮住

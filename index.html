@@ -48,15 +48,15 @@
                 
                 <div class="header-right">
                     <nav class="header-links" aria-label="課堂資訊圖表">
-                        <a class="action-btn" href="infographics/#teacher-profile" target="_blank" rel="noopener" title="教師簡歷（開新分頁）">
+                        <button type="button" class="action-btn" data-infographic="teacher-profile" title="教師簡歷">
                             <i class="fa-solid fa-id-card"></i> 教師簡歷
-                        </a>
-                        <a class="action-btn" href="infographics/#teaching-flow" target="_blank" rel="noopener" title="教學流程（開新分頁）">
+                        </button>
+                        <button type="button" class="action-btn" data-infographic="teaching-flow" title="教學流程">
                             <i class="fa-solid fa-diagram-project"></i> 教學流程
-                        </a>
-                        <a class="action-btn" href="infographics/#grading" target="_blank" rel="noopener" title="學期成績計算方法（開新分頁）">
+                        </button>
+                        <button type="button" class="action-btn" data-infographic="grading" title="學期成績計算方法">
                             <i class="fa-solid fa-percent"></i> 成績計算
-                        </a>
+                        </button>
                     </nav>
                     <div id="timer-display" class="timer-badge">
                         <i class="fa-solid fa-clock"></i>
@@ -250,6 +250,30 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-close-modal="modal-logs">關閉</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== MODAL: 課堂資訊圖表 ==================== -->
+        <!-- 圖檔不在本 repo，由後端驗證 session 後回傳 base64，未登入者拿不到 -->
+        <div id="modal-infographic" class="modal-overlay hidden">
+            <div class="modal modal-lg modal-infographic">
+                <div class="modal-header">
+                    <h3><i class="fa-solid fa-image"></i> <span id="infographic-title">課堂資訊</span></h3>
+                    <button type="button" class="modal-close" data-close-modal="modal-infographic" aria-label="關閉">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+                <div class="modal-body infographic-body">
+                    <div id="infographic-loading" class="infographic-status hidden">
+                        <div class="spinner"></div>
+                        <p>載入圖表中，請稍候...</p>
+                    </div>
+                    <div id="infographic-error" class="infographic-status hidden"></div>
+                    <img id="infographic-image" class="infographic-image hidden" alt="">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-close-modal="modal-infographic">關閉</button>
                 </div>
             </div>
         </div>

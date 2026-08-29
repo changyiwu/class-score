@@ -23,6 +23,22 @@ var LOCK_TIMEOUT_MS = 15000;                 // 寫入試算表時等待鎖的�
 var LOG_SHEET_NAME = "_Log";
 var LOG_MAX_ROWS = 5000;                     // 超過即從最舊的開始裁切
 var LOG_TRIM_BATCH = 500;                    // 每次裁切的筆數，避免頻繁刪列
+// 課堂資訊圖表：圖檔放在雲端硬碟的私有資料夾（不進公開 repo），由後端驗證 session 後回傳。
+// 部署設定是 executeAs = USER_DEPLOYING，因此這裡以擁有者權限讀取，外人拿到資料夾 ID 也開不了。
+var INFOGRAPHIC_FOLDER_ID = "1HJY9LryVVcMAd9kikx2_G5800W2fyE7D";
+
+// key 一律經白名單映射成檔名。**絕不可**直接把前端傳來的字串當檔名，
+// 否則任何登入者都能藉此讀出該資料夾內的任意檔案。
+var INFOGRAPHIC_FILES = {
+  "teacher-profile": "teacher-profile.webp",
+  "teaching-flow": "teaching-flow.webp",
+  "grading": "grading.webp"
+};
+
+// 圖片的無障礙描述也放在同一個私有資料夾。teacher-profile 的描述含教師個人資料，
+// 因此**不可**寫進前端或本 repo，一律隨圖從 Drive 取回。
+var INFOGRAPHIC_META_FILE = "meta.json";
+
 var LOG_DEFAULT_LIMIT = 100;                 // 查詢紀錄時預設回傳筆數
 var LOG_MAX_LIMIT = 500;
 
@@ -82,6 +98,9 @@ function doPost(e) {
 
       case "get_logs":
         return handleGetLogs(request.className, request.limit);
+
+      case "get_infographic":
+        return handleGetInfographic(request.key);
 
       case "logout":
         return handleLogout(session);
@@ -379,6 +398,52 @@ function handleLogin(request) {
 function handleLogout(session) {
   CacheService.getScriptCache().remove(SESSION_KEY_PREFIX + session);
   return jsonResponse({ success: true, message: "Logged out successfully" });
+}
+
+// ==================== 課堂資訊圖表 ====================
+
+// 回傳一張資訊圖表的 base64 內容。圖檔不在公開 repo，只有通過 session 驗證才拿得到。
+function handleGetInfographic(key) {
+  if (typeof key !== "string" || !Object.prototype.hasOwnProperty.call(INFOGRAPHIC_FILES, key)) {
+    // 用 hasOwnProperty 而非直接取值，避免 "constructor" 這類原型屬性繞過白名單
+    return jsonResponse({ success: false, error: "Unknown infographic" });
+  }
+
+  var fileName = INFOGRAPHIC_FILES[key];
+
+  try {
+    var files = DriveApp.getFolderById(INFOGRAPHIC_FOLDER_ID).getFilesByName(fileName);
+    if (!files.hasNext()) {
+      return jsonResponse({ success: false, error: "圖檔不存在：" + fileName });
+    }
+
+    var blob = files.next().getBlob();
+    return jsonResponse({
+      success: true,
+      mimeType: blob.getContentType(),
+      alt: readInfographicAlt(key),
+      data: Utilities.base64Encode(blob.getBytes())
+    });
+  } catch (err) {
+    // 資料夾 ID 失效或權限問題只記在伺服器端，不把細節回給用戶端
+    Logger.log("handleGetInfographic error: " + err.toString());
+    return jsonResponse({ success: false, error: "讀取圖檔失敗" });
+  }
+}
+
+// 取一張圖的無障礙描述。meta.json 缺漏或壞掉都只是少了描述，不該讓整張圖開不起來。
+function readInfographicAlt(key) {
+  try {
+    var files = DriveApp.getFolderById(INFOGRAPHIC_FOLDER_ID).getFilesByName(INFOGRAPHIC_META_FILE);
+    if (!files.hasNext()) return "";
+
+    var meta = JSON.parse(files.next().getBlob().getDataAsString("UTF-8"));
+    if (meta && meta[key] && typeof meta[key].alt === "string") return meta[key].alt;
+    return "";
+  } catch (err) {
+    Logger.log("readInfographicAlt error: " + err.toString());
+    return "";
+  }
 }
 
 // ==================== 操作紀錄（_Log）====================

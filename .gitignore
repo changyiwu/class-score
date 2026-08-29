@@ -25,8 +25,9 @@ temp/
 # 交接檔含真實電腦名與本機路徑，只走雲端硬碟同步，不進公開 repo
 handoff.md
 
-# 資訊圖表的生圖原檔（每張數 MB，成品已在 infographics/*.png，要重生看 spec 即可）
-infographics/source/
+# 資訊圖表整個目錄都不進版控：spec 與提示詞裡有教師個人資料（學歷、兵役、服務單位），
+# 圖檔本身也只該存在於 Drive 私有資料夾。這個 repo 是公開的，放進來就等於公開。
+infographics/
 
 # 雲端硬碟同步下來的試算表／指令碼捷徑（含 doc id 與 script id），只留在本機不進公開 repo
 ClassScoreDB.gsheet
