@@ -60,7 +60,7 @@ class-score/
 ├── infographics/    # 課堂資訊圖表（**整個目錄已 gitignore**，含個資，只靠雲端硬碟同步保存）
 │   ├── private/     # 供圖用的 webp 與 meta.json，同步成 Drive 私有資料夾
 │   ├── prompts/     # 提示詞紀錄
-│   ├── source/      # 生圖原檔與原始 png
+│   ├── source/      # 生圖原檔；source/final-png/ 是上線圖的原始 PNG（webp 的來源）
 │   └── *.spec.yaml  # 重生用的規格
 ├── vendor/
 ├── gas/
@@ -142,7 +142,7 @@ class-score/
 - **要求鮮豔配色時，必須把範圍限縮在「圖示本體」並聲明卡片底板維持奶白**：只說「飽和色」會讓模型把標題底板整塊染成深藍，破壞 `paper_warm` 的暖紙風格
 - **標題的 title 與 note 兩行要明講「同留在底板上」**：否則模型會把其中一行搬去當連接線上的標籤，順手把原本該在那個位置的字串吃掉（曾讓「每階段」整個消失）
 - **Claude Code 沒有內建生圖，走 `agent-draw` 技能的 `draw.py`**；提示詞很長且含引號，要用小腳本讀檔案再送進去，不要從 shell 展開。中文要零錯，`--quality` 用 `high`
-- **整個 `infographics/` 目錄都不進版控**（已 gitignore）。裡面的 spec 與提示詞含教師個人資料（學歷、兵役、服務單位），這個 repo 是公開的，放進來就等於公開。目錄本體靠雲端硬碟同步保存，不靠 git
+- **整個 `infographics/` 目錄都不進版控**（已 gitignore）。裡面的 spec 與提示詞含教師個人資料（學歷、兵役、服務單位），這個 repo 是公開的，放進來就等於公開。目錄本體靠雲端硬碟同步保存，不靠 git。**代價是它沒有版本保護**：spec、提示詞、原始 png 誤刪或誤改都無法用 git 復原，動它之前先想清楚
 - **供圖的是 `infographics/private/`**，經雲端硬碟桌面同步成為 Drive 私有資料夾（權限只有擁有者）。前端要圖一律走 `get_infographic`，後端驗過 session 才回 base64
 - **圖片的 alt 文字放在 `infographics/private/meta.json`，隨圖從 Drive 取回，絕不可寫進前端或 repo**：教師簡歷那段 alt 本身就是個資。`app.js` 的 `INFOGRAPHICS` 只准放標題
 - **供圖的 Drive 資料夾 ID 寫在 `gas/Code.js` 的 `INFOGRAPHIC_FOLDER_ID`**（`1HJY9LryVVcMAd9kikx2_G5800W2fyE7D`）。它不是密鑰——資料夾權限只有擁有者，部署設定又是 `executeAs: USER_DEPLOYING`，外人拿到 ID 也開不了
@@ -209,4 +209,5 @@ class-score/
 ### 版本控制
 - 不要將敏感的 OAuth token 或認證金鑰提交至 Git
 - `gas/.clasp.json` 含腳本 ID，可提交；但個人認證檔 `~/.clasprc.json` 必須留在使用者主目錄，**絕不能進入專案目錄**
+- **本 repo 的 commit 身分必須用 GitHub noreply 位址**（`252014858+changyiwu@users.noreply.github.com`），不可用真實 Gmail——公開 repo 的 commit 作者欄任何人都看得到。設定寫在 repo 層級的 `git config`，**在新電腦 clone 後要重設一次**，否則會沿用全域設定的 Gmail
 - **雲端硬碟同步下來的捷徑檔 `ClassScoreDB.gsheet`／`ClassScoreBackend.gscript` 不進版控**（已 gitignore）：內容是 doc id 與 script id，repo 公開不必外流。日後再把雲端檔搬進專案資料夾，記得同步補 gitignore
