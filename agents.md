@@ -56,7 +56,7 @@ class-score/
 ├── app.js
 ├── index.html
 ├── style.css
-├── assets/          # 品牌圖示（logo 兼 favicon）
+├── assets/          # 品牌圖示（手寫 SVG，logo 兼 favicon）
 ├── infographics/    # 課堂資訊圖表（**整個目錄已 gitignore**，含個資，只靠雲端硬碟同步保存）
 │   ├── private/     # 供圖用的 webp 與 meta.json，同步成 Drive 私有資料夾
 │   ├── prompts/     # 提示詞紀錄
@@ -132,6 +132,10 @@ class-score/
 - **防 Excel 公式注入的前置單引號必須放行純數字**：姓名來自試算表屬外部輸入，以 `= + - @` 開頭要中和，但 `-3` 這種負分若也加上單引號就變成文字、Excel 無法加總。判斷式見 `csvEscapeCell`
 - 匯出一律用畫面上已載入的資料（`state.students`／`state.currentLogs`），**不另外打 API**；紀錄匯出的範圍與筆數跟著紀錄視窗當下的設定走
 
+### 品牌標誌
+
+- **Logo 與 favicon 一律手寫 SVG，不用生圖技能**：同一張圖要同時撐住 16px 分頁圖標與登入畫面的大尺寸，點陣圖兩端難以兼顧，也吃不準專案色票，微調只能整張重生（實測 42.9 KB → 2.2 KB）。發光用 `radialGradient` 疊底，不要用 `feGaussianBlur`（favicon 的渲染路徑對濾鏡支援不一）；夾具這種鏤空用 `<mask>` 做成真的挖空，不要拿底色方塊假裝——這張圖是透明底的，假裝的挖空在淺色分頁列上會現形
+
 ### 資訊圖表（`infographics/`）
 
 - 用 `yaml-infographic` 技能產生，風格固定 `global:paper_warm@1.2.0`（紙感立體貼紙、暖色淺底）
@@ -152,6 +156,7 @@ class-score/
 - **圖檔一律先壓成 WebP q85 再放進 Drive**：1024×1024 的 `paper_warm` 圖從 1.5 MB 掉到 80–95 KB（PSNR 約 38 dB，放大檢查小字與插圖皆無損），base64 後約 100 KB，GAS 回一趟很輕。直接送 PNG 會讓每次開圖都等上好幾秒
 - **圖片顯示在主程式的 `#modal-infographic`，不再有獨立檢視頁**。`.infographic-image` 必須同時被 `max-width` 與 `max-height: calc(88vh - 190px)` 夾住，否則 1366×768 的筆電上 modal 會超出畫面
 - **同一次登入內圖只抓一次**（`state.infographicCache`），登出時由 `clearLocalSession` 清掉。連點不同按鈕時用 `state.infographicPending` 丟棄較早的回應，避免先發後到蓋掉畫面
+- **個資清除有能力邊界**：GitHub 上已清乾淨（2026-08-29 刪除重建 repo，舊網址全數 404），但**無法追回先前已被別人 clone、抓取或被搜尋引擎快取的副本**。評估新的個資風險時要把這件事算進去：進了公開 repo 就回不來，事後清除只能降低風險、不能歸零
 - **`paper_warm` 偏好的 jf open 粉圓／GenSenRounded TW 字型本機沒裝**。目前是 `baked` 模式、字由生圖模型畫，不受影響；但若改回 `plate` 模式用程式疊字，字型會退回微軟正黑體
 
 ## 工作約定

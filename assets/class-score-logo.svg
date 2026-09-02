@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="課堂表現登記系統">
+  <defs>
+    <linearGradient id="csBoard" x1="0" y1="0" x2=".35" y2="1">
+      <stop offset="0" stop-color="#60a5fa"/>
+      <stop offset=".45" stop-color="#2563eb"/>
+      <stop offset="1" stop-color="#1e40af"/>
+    </linearGradient>
+    <linearGradient id="csClip" x1="0" y1="0" x2=".3" y2="1">
+      <stop offset="0" stop-color="#c084fc"/>
+      <stop offset=".55" stop-color="#8b5cf6"/>
+      <stop offset="1" stop-color="#6d28d9"/>
+    </linearGradient>
+    <linearGradient id="csStar" x1=".15" y1="0" x2=".8" y2="1">
+      <stop offset="0" stop-color="#fde68a"/>
+      <stop offset=".45" stop-color="#fbbf24"/>
+      <stop offset="1" stop-color="#e08c09"/>
+    </linearGradient>
+    <mask id="csHole">
+      <rect width="256" height="256" fill="#ffffff"/>
+      <circle cx="130" cy="42" r="9.5" fill="#000000"/>
+    </mask>
+  </defs>
+
+  <!-- 板子 -->
+  <rect x="58" y="54" width="136" height="152" rx="20" fill="url(#csBoard)"/>
+  <rect x="74" y="72" width="104" height="112" rx="13" fill="#232a52"/>
+
+  <!-- 三列登記項目 -->
+  <g>
+    <circle cx="93" cy="100" r="8.5" fill="#38bdf8"/>
+    <rect x="109" y="94" width="60" height="12" rx="6" fill="#3b82f6"/>
+    <circle cx="93" cy="128" r="8.5" fill="#a855f7"/>
+    <rect x="109" y="122" width="49" height="12" rx="6" fill="#8b5cf6"/>
+    <circle cx="93" cy="156" r="8.5" fill="#7c3aed"/>
+    <rect x="109" y="150" width="26" height="12" rx="6" fill="#6d28d9"/>
+  </g>
+
+  <!-- 上方夾具（中間鏤空） -->
+  <g mask="url(#csHole)">
+    <rect x="94" y="46" width="72" height="28" rx="9" fill="url(#csClip)"/>
+    <rect x="111" y="27" width="38" height="30" rx="15" fill="url(#csClip)"/>
+  </g>
+
+  <!-- 金星 -->
+  <path d="M170 111L181.5 140.7L213 142.6L188.5 162.6L196.6 193.6L170 176.6L143.4 193.6L151.5 162.6L127 142.6L158.5 140.7Z" fill="url(#csStar)" stroke="#b45309" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M170 126L176 141.5L192 142.5L179.5 152.6L183.6 168.4L170 159.7L156.4 168.4L160.5 152.6L148 142.5L164 141.5Z" fill="#fef3c7" opacity=".3"/>
+</svg>
