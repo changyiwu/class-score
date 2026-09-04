@@ -40,7 +40,8 @@ const DEFAULT_STUDENT_COUNT = 30;
 const INFOGRAPHICS = {
     "teacher-profile": { title: "教師簡歷" },
     "teaching-flow": { title: "教學流程" },
-    "grading": { title: "學期成績計算方法" }
+    "grading": { title: "學期成績計算方法" },
+    "conduct": { title: "課堂表現加減分" }
 };
 
 // Global Application State

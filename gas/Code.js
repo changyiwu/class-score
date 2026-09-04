@@ -32,7 +32,8 @@ var INFOGRAPHIC_FOLDER_ID = "1HJY9LryVVcMAd9kikx2_G5800W2fyE7D";
 var INFOGRAPHIC_FILES = {
   "teacher-profile": "teacher-profile.webp",
   "teaching-flow": "teaching-flow.webp",
-  "grading": "grading.webp"
+  "grading": "grading.webp",
+  "conduct": "conduct.webp"
 };
 
 // 圖片的無障礙描述也放在同一個私有資料夾。teacher-profile 的描述含教師個人資料，
