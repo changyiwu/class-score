@@ -43,6 +43,14 @@ var INFOGRAPHIC_META_FILE = "meta.json";
 var LOG_DEFAULT_LIMIT = 100;                 // 查詢紀錄時預設回傳筆數
 var LOG_MAX_LIMIT = 500;
 
+// 考卷檢討（原 exam-review 專案併入）。考卷資料夾是「知道連結的人可檢視」，
+// 它的 ID 等同於通行證，**絕不可**寫進本檔（公開 repo），只放 _Settings 的 ExamFolderId。
+// 清單只回檔名與一次性 handle；handle -> fileId 的對應表跟著 session 存在 CacheService，
+// 真正的 Drive 網址只在點下檔案時由 get_exam_file_url 當場發出。
+var EXAM_FILEMAP_KEY_PREFIX = "exam_files_";
+var EXAM_TREE_MAX_DEPTH = 4;
+var EXAM_TREE_MAX_FILES = 300;               // 對應表要塞進單一 cache 值（上限 100 KB）
+
 // Google 試算表分頁名稱不允許的字元
 var INVALID_SHEET_NAME_CHARS = /[:\\\/\?\*\[\]]/;
 
@@ -102,6 +110,12 @@ function doPost(e) {
 
       case "get_infographic":
         return handleGetInfographic(request.key);
+
+      case "list_exam_files":
+        return handleListExamFiles(session);
+
+      case "get_exam_file_url":
+        return handleGetExamFileUrl(session, request.handle);
 
       case "logout":
         return handleLogout(session);
@@ -397,7 +411,9 @@ function handleLogin(request) {
 
 // Handle Logout
 function handleLogout(session) {
-  CacheService.getScriptCache().remove(SESSION_KEY_PREFIX + session);
+  var cache = CacheService.getScriptCache();
+  cache.remove(SESSION_KEY_PREFIX + session);
+  cache.remove(EXAM_FILEMAP_KEY_PREFIX + session);
   return jsonResponse({ success: true, message: "Logged out successfully" });
 }
 
@@ -444,6 +460,115 @@ function readInfographicAlt(key) {
   } catch (err) {
     Logger.log("readInfographicAlt error: " + err.toString());
     return "";
+  }
+}
+
+// ==================== 考卷檢討 ====================
+
+/**
+ * 回傳考卷資料夾的樹狀清單。檔案一律只給 handle，不給 fileId、不給網址。
+ * handle -> fileId 的對應表跟著 session 存進 cache，session 登出或過期就換不到網址。
+ * 每次呼叫都會發一批新的 handle，覆蓋舊的對應表。
+ */
+function handleListExamFiles(session) {
+  var folderId = getSetting("ExamFolderId", "").toString().trim();
+  if (!folderId) {
+    return jsonResponse({ success: false, error: "尚未設定考卷資料夾，請在試算表 _Settings 分頁填入 ExamFolderId" });
+  }
+
+  var root;
+  try {
+    root = DriveApp.getFolderById(folderId);
+  } catch (err) {
+    // 錯誤訊息不帶出資料夾 ID
+    Logger.log("handleListExamFiles open folder error: " + err.toString());
+    return jsonResponse({ success: false, error: "考卷資料夾打不開，請確認 _Settings 的 ExamFolderId" });
+  }
+
+  var fileMap = {};
+  var counter = { files: 0, truncated: false };
+  var tree = buildExamTree(root, 0, fileMap, counter);
+
+  CacheService.getScriptCache().put(
+    EXAM_FILEMAP_KEY_PREFIX + session,
+    JSON.stringify(fileMap),
+    getSessionDurationMinutes() * 60
+  );
+
+  return jsonResponse({
+    success: true,
+    name: root.getName(),
+    tree: tree,
+    truncated: counter.truncated
+  });
+}
+
+function buildExamTree(folder, depth, fileMap, counter) {
+  var nodes = [];
+
+  var subFolders = folder.getFolders();
+  while (subFolders.hasNext()) {
+    var sub = subFolders.next();
+    nodes.push({
+      type: "folder",
+      name: sub.getName(),
+      children: depth + 1 < EXAM_TREE_MAX_DEPTH ? buildExamTree(sub, depth + 1, fileMap, counter) : []
+    });
+  }
+
+  var files = folder.getFiles();
+  while (files.hasNext()) {
+    if (counter.files >= EXAM_TREE_MAX_FILES) {
+      counter.truncated = true;
+      break;
+    }
+    var file = files.next();
+    var handle = Utilities.getUuid();
+    fileMap[handle] = file.getId();
+    counter.files += 1;
+
+    nodes.push({
+      type: "file",
+      name: file.getName(),
+      handle: handle,
+      mimeType: file.getMimeType(),
+      size: file.getSize(),
+      modified: Utilities.formatDate(file.getLastUpdated(), "Asia/Taipei", "yyyy-MM-dd")
+    });
+  }
+
+  // 資料夾在前、檔案在後，各自依名稱排序（1-七上、2-七下… 的數字前綴就是靠這個排對）
+  nodes.sort(function (a, b) {
+    if (a.type !== b.type) return a.type === "folder" ? -1 : 1;
+    return a.name.localeCompare(b.name, "zh-Hant");
+  });
+
+  return nodes;
+}
+
+function handleGetExamFileUrl(session, handle) {
+  var raw = CacheService.getScriptCache().get(EXAM_FILEMAP_KEY_PREFIX + session);
+  if (!raw) {
+    return jsonResponse({ success: false, error: "檔案清單已過期，請重新整理清單" });
+  }
+
+  var fileMap;
+  try {
+    fileMap = JSON.parse(raw);
+  } catch (err) {
+    return jsonResponse({ success: false, error: "檔案清單已過期，請重新整理清單" });
+  }
+
+  // 與資訊圖表白名單同理，用 hasOwnProperty 擋掉 "constructor" 這類原型屬性
+  if (typeof handle !== "string" || !Object.prototype.hasOwnProperty.call(fileMap, handle)) {
+    return jsonResponse({ success: false, error: "找不到這個檔案，請重新整理清單" });
+  }
+
+  try {
+    return jsonResponse({ success: true, url: DriveApp.getFileById(fileMap[handle]).getUrl() });
+  } catch (err) {
+    Logger.log("handleGetExamFileUrl error: " + err.toString());
+    return jsonResponse({ success: false, error: "檔案打不開，可能已被刪除或移動" });
   }
 }
 

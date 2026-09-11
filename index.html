@@ -47,20 +47,30 @@
                 </div>
                 
                 <div class="header-right">
-                    <nav class="header-links" aria-label="課堂資訊圖表">
-                        <button type="button" class="action-btn" data-infographic="teacher-profile" title="教師簡歷">
-                            <i class="fa-solid fa-id-card"></i> 教師簡歷
+                    <!-- 四張資訊圖表收進一顆下拉選單，頁首寬度有預算（見 agents.md〈UI/UX 設計〉） -->
+                    <div class="header-menu">
+                        <button type="button" id="btn-infographic-menu" class="action-btn"
+                                aria-haspopup="true" aria-expanded="false" aria-controls="infographic-menu">
+                            <i class="fa-solid fa-images"></i> 課堂資訊 <i class="fa-solid fa-chevron-down menu-caret"></i>
                         </button>
-                        <button type="button" class="action-btn" data-infographic="teaching-flow" title="教學流程">
-                            <i class="fa-solid fa-diagram-project"></i> 教學流程
-                        </button>
-                        <button type="button" class="action-btn" data-infographic="grading" title="學期成績計算方法">
-                            <i class="fa-solid fa-percent"></i> 成績計算
-                        </button>
-                        <button type="button" class="action-btn" data-infographic="conduct" title="課堂表現加減分">
-                            <i class="fa-solid fa-plus-minus"></i> 加減分
-                        </button>
-                    </nav>
+                        <div id="infographic-menu" class="header-menu-list hidden" role="menu" aria-label="課堂資訊圖表">
+                            <button type="button" class="menu-item" role="menuitem" data-infographic="teacher-profile">
+                                <i class="fa-solid fa-id-card"></i> 教師簡歷
+                            </button>
+                            <button type="button" class="menu-item" role="menuitem" data-infographic="teaching-flow">
+                                <i class="fa-solid fa-diagram-project"></i> 教學流程
+                            </button>
+                            <button type="button" class="menu-item" role="menuitem" data-infographic="grading">
+                                <i class="fa-solid fa-percent"></i> 成績計算
+                            </button>
+                            <button type="button" class="menu-item" role="menuitem" data-infographic="conduct">
+                                <i class="fa-solid fa-plus-minus"></i> 加減分
+                            </button>
+                        </div>
+                    </div>
+                    <button type="button" id="btn-exam-review" class="action-btn" title="段考試卷檢討簡報">
+                        <i class="fa-solid fa-file-circle-check"></i> 考卷檢討
+                    </button>
                     <div id="timer-display" class="timer-badge">
                         <i class="fa-solid fa-clock"></i>
                         <span id="timer-text">剩餘 45:00</span>
@@ -277,6 +287,31 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-close-modal="modal-infographic">關閉</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== MODAL: 考卷檢討 ==================== -->
+        <!-- 清單只有檔名與一次性 handle，Drive 網址在點檔案時才由後端發出；關閉視窗即清掉檔名 -->
+        <div id="modal-exam" class="modal-overlay hidden">
+            <div class="modal modal-lg">
+                <div class="modal-header">
+                    <h3><i class="fa-solid fa-file-circle-check"></i> 考卷檢討</h3>
+                    <button type="button" class="modal-close" data-close-modal="modal-exam" aria-label="關閉">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="logs-toolbar">
+                        <span class="modal-hint exam-hint"><i class="fa-solid fa-circle-info"></i> 點檔案會在新分頁開啟</span>
+                        <button type="button" id="btn-exam-refresh" class="action-btn" title="重新讀取考卷資料夾">
+                            <i class="fa-solid fa-rotate-right"></i> 重新整理
+                        </button>
+                    </div>
+                    <div id="exam-tree" class="exam-tree"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-close-modal="modal-exam">關閉</button>
                 </div>
             </div>
         </div>

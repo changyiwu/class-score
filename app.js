@@ -44,7 +44,21 @@ const INFOGRAPHICS = {
     "conduct": { title: "課堂表現加減分" }
 };
 
+// 考卷檢討的檔案圖示，依 mimeType 與副檔名判斷
+const EXAM_FILE_ICONS = [
+    { test: /presentation|powerpoint|\.pptx?$/i, cls: "ppt", icon: "fa-file-powerpoint" },
+    { test: /pdf/i,                              cls: "pdf", icon: "fa-file-pdf" },
+    { test: /image\//i,                          cls: "img", icon: "fa-file-image" }
+];
+
+// 登入過去存在 localStorage 的兩個 key。現在 session 只放記憶體，
+// 啟動時仍要清掉舊版殘留，否則大螢幕上會一直留著一組舊 token
+const LEGACY_SESSION_KEYS = ["session_token", "session_expiry"];
+
 // Global Application State
+// ⚠️ session token 只存在記憶體，不進 localStorage／sessionStorage：
+// 教室大螢幕是任何人都走得到的裝置，而考卷檢討的 Drive 網址一旦外流就收不回來。
+// 重新整理或關掉分頁就等於登出，重新掃碼只要幾秒。
 const state = {
     sessionToken: null,
     sessionExpiry: null,
@@ -57,6 +71,8 @@ const state = {
     currentLogs: [],   // 紀錄視窗當下載入的那批，供匯出 CSV 使用
     infographicCache: {},  // key -> { dataUri, alt }，同一次登入內只跟後端要一次
     infographicPending: null,  // 目前等待中的圖表 key，用來丟棄過期的回應
+    examTree: null,      // 考卷清單（含一次性 handle），同一次登入內沿用，登出即丟
+    examEpoch: 0,        // 開關視窗、重新整理、登出都會 +1，用來丟棄過期的清單回應
     timerInterval: null,
     pollInterval: null,
     pairingRetryTimer: null,  // 配對通道失敗後的重試計時器，重新進入登入畫面時要清掉
@@ -164,8 +180,51 @@ function setupClassActionListeners() {
     if (exportLogsBtn) exportLogsBtn.addEventListener("click", exportLogsCsv);
 
     document.querySelectorAll("[data-infographic]").forEach(btn => {
-        btn.addEventListener("click", () => openInfographic(btn.dataset.infographic));
+        btn.addEventListener("click", () => {
+            closeHeaderMenu();
+            openInfographic(btn.dataset.infographic);
+        });
     });
+
+    const menuBtn = document.getElementById("btn-infographic-menu");
+    if (menuBtn) {
+        menuBtn.addEventListener("click", (e) => {
+            e.stopPropagation(); // 不讓下面「點選單外面就關閉」的監聽器馬上又把它關掉
+            toggleHeaderMenu();
+        });
+    }
+
+    // 點選單以外的地方就收起來（大螢幕觸控沒有「滑出去」這回事）
+    document.addEventListener("click", (e) => {
+        const menu = document.getElementById("infographic-menu");
+        if (menu && !menu.classList.contains("hidden") && !menu.contains(e.target)) {
+            closeHeaderMenu();
+        }
+    });
+
+    const examBtn = document.getElementById("btn-exam-review");
+    if (examBtn) examBtn.addEventListener("click", openExamViewer);
+
+    const examRefreshBtn = document.getElementById("btn-exam-refresh");
+    if (examRefreshBtn) examRefreshBtn.addEventListener("click", () => loadExamTree(true));
+}
+
+function toggleHeaderMenu() {
+    const menu = document.getElementById("infographic-menu");
+    if (!menu) return;
+    if (menu.classList.contains("hidden")) {
+        menu.classList.remove("hidden");
+        document.getElementById("btn-infographic-menu").setAttribute("aria-expanded", "true");
+    } else {
+        closeHeaderMenu();
+    }
+}
+
+function closeHeaderMenu() {
+    const menu = document.getElementById("infographic-menu");
+    const btn = document.getElementById("btn-infographic-menu");
+    if (menu) menu.classList.add("hidden");
+    if (btn) btn.setAttribute("aria-expanded", "false");
 }
 
 // 對話框共用行為：關閉鈕、點背景關閉、Esc 關閉
@@ -183,6 +242,11 @@ function setupModalListeners() {
 
     document.addEventListener("keydown", (e) => {
         if (e.key !== "Escape") return;
+        const menu = document.getElementById("infographic-menu");
+        if (menu && !menu.classList.contains("hidden")) {
+            closeHeaderMenu();
+            return;
+        }
         const open = document.querySelector(".modal-overlay:not(.hidden)");
         if (open) closeModal(open.id);
     });
@@ -190,42 +254,11 @@ function setupModalListeners() {
 
 // ==================== ROUTING & INITIALIZATION ==================== */
 
-// Desktop Mode Session Verification & Init
+// Desktop Mode Init
+// session 只存在記憶體，所以頁面一載入必定是未登入狀態，直接進登入畫面
 function checkSessionAndInit() {
-    const cachedToken = localStorage.getItem("session_token");
-    const cachedExpiry = localStorage.getItem("session_expiry");
-    
-    if (cachedToken && cachedExpiry && Date.now() < parseInt(cachedExpiry, 10)) {
-        // Valid local session exists, verify with backend
-        state.sessionToken = cachedToken;
-        state.sessionExpiry = parseInt(cachedExpiry, 10);
-        
-        showLoading(true);
-        callAPI({ action: "check_session" })
-            .then(res => {
-                showLoading(false);
-                if (res.success && res.authenticated) {
-                    enterSystem();
-                } else {
-                    // Session rejected by server cache, force login
-                    clearLocalSession();
-                    showDesktopLogin();
-                }
-            })
-            .catch(err => {
-                showLoading(false);
-                console.error("Session validation failed", err);
-                // 連不上後端時不要放行進主畫面，否則每個操作都會失敗且無從理解。
-                // 退回登入畫面即可，該畫面本身會每 5 秒自動重試建立通道。
-                showToast("無法連線至伺服器，請確認網路後重新登入", "error");
-                clearLocalSession();
-                showDesktopLogin();
-            });
-    } else {
-        // No valid session, show login screen
-        clearLocalSession();
-        showDesktopLogin();
-    }
+    clearLocalSession();
+    showDesktopLogin();
 }
 
 // Enter the main dashboard
@@ -385,13 +418,11 @@ function storeSession(sessionToken, expiresInMinutes) {
     const durationMs = (isNaN(minutes) || minutes <= 0 ? 45 : minutes) * 60 * 1000;
     const expiry = Date.now() + durationMs;
 
+    // 只放記憶體，理由見 state 上方的註解
     state.sessionToken = sessionToken;
     state.sessionExpiry = expiry;
     state.pairId = null;
     state.pollKey = null;
-
-    localStorage.setItem("session_token", sessionToken);
-    localStorage.setItem("session_expiry", expiry.toString());
 }
 
 // Session countdown timer (Desktop)
@@ -877,7 +908,11 @@ function performLogout() {
     }
     
     clearLocalSession();
-    
+
+    // 逾時登出時視窗可能還開著：modal 的 z-index 高過登入畫面，不關掉會蓋住 QR Code
+    closeHeaderMenu();
+    document.querySelectorAll(".modal-overlay:not(.hidden)").forEach(overlay => closeModal(overlay.id));
+
     // Reset view to QR Code login
     document.getElementById("desktop-view").classList.add("hidden");
     showDesktopLogin();
@@ -1028,6 +1063,7 @@ function openModal(id) {
 function closeModal(id) {
     const el = document.getElementById(id);
     if (el) el.classList.add("hidden");
+    if (id === "modal-exam") clearExamTreeView();
 }
 
 // ==================== 課堂資訊圖表 ==================== */
@@ -1099,6 +1135,174 @@ function setInfographicState(which, message) {
     img.classList.toggle("hidden", which !== "image");
 
     if (which === "error") error.innerText = message || "";
+}
+
+// ==================== 考卷檢討 ==================== */
+
+// 考卷資料夾是「知道連結的人可檢視」，網址就是通行證。
+// 後端清單只給檔名與一次性 handle，網址要點下檔案時才拿得到；
+// 前端關閉視窗就清掉畫面上的檔名，登出再把記憶體裡的清單一起丟掉。
+function openExamViewer() {
+    closeHeaderMenu();
+    openModal("modal-exam");
+    loadExamTree(false);
+}
+
+// force 為 false 時沿用這次登入已經拿過的清單，省下一趟走訪 Drive 的時間
+function loadExamTree(force) {
+    const container = document.getElementById("exam-tree");
+    const epoch = ++state.examEpoch;
+
+    if (state.examTree && !force) {
+        renderExamTree(state.examTree);
+        return;
+    }
+
+    container.innerHTML = `<div class="logs-empty"><div class="spinner"></div>讀取考卷資料夾中...</div>`;
+
+    callAPI({ action: "list_exam_files" })
+        .then(res => {
+            // 視窗已關閉、已登出或又按了一次重新整理，這份回應作廢
+            if (epoch !== state.examEpoch) return;
+
+            if (!res.success) {
+                container.innerHTML = `<div class="logs-empty"><i class="fa-solid fa-triangle-exclamation"></i>${escapeHtml(res.error || "讀取失敗")}</div>`;
+                return;
+            }
+            state.examTree = res.tree || [];
+            renderExamTree(state.examTree);
+            if (res.truncated) showToast("檔案數量較多，只列出前面一部分", "error");
+        })
+        .catch(err => {
+            console.error("list_exam_files failed", err);
+            if (epoch !== state.examEpoch) return;
+            container.innerHTML = `<div class="logs-empty"><i class="fa-solid fa-plug-circle-xmark"></i>無法連線至伺服器，請按「重新整理」再試一次</div>`;
+        });
+}
+
+function clearExamTreeView() {
+    state.examEpoch++;
+    const container = document.getElementById("exam-tree");
+    if (container) container.innerHTML = "";
+}
+
+function renderExamTree(nodes) {
+    const container = document.getElementById("exam-tree");
+    container.innerHTML = "";
+
+    if (!nodes.length) {
+        container.innerHTML = `<div class="logs-empty"><i class="fa-regular fa-folder-open"></i>考卷資料夾裡還沒有檔案</div>`;
+        return;
+    }
+    container.appendChild(renderExamNodes(nodes));
+}
+
+function renderExamNodes(nodes) {
+    const frag = document.createDocumentFragment();
+
+    nodes.filter(n => n.type === "folder").forEach(folder => {
+        const group = document.createElement("div");
+        group.className = "exam-folder";
+
+        const head = document.createElement("button");
+        head.type = "button";
+        head.className = "exam-folder-head";
+        head.setAttribute("aria-expanded", "false");
+        head.innerHTML = `
+            <i class="fa-solid fa-folder folder-icon"></i>
+            <span class="exam-folder-name">${escapeHtml(folder.name)}</span>
+            <span class="exam-folder-count">${countExamFiles(folder)} 個檔案</span>
+            <i class="fa-solid fa-chevron-right exam-chevron"></i>
+        `;
+
+        const body = document.createElement("div");
+        body.className = "exam-folder-body hidden";
+        body.appendChild(renderExamNodes(folder.children || []));
+
+        head.addEventListener("click", () => {
+            const open = !body.classList.toggle("hidden");
+            head.classList.toggle("open", open);
+            head.setAttribute("aria-expanded", String(open));
+            head.querySelector(".folder-icon").className =
+                `fa-solid ${open ? "fa-folder-open" : "fa-folder"} folder-icon`;
+        });
+
+        group.appendChild(head);
+        group.appendChild(body);
+        frag.appendChild(group);
+    });
+
+    const files = nodes.filter(n => n.type === "file");
+    if (files.length) {
+        const grid = document.createElement("div");
+        grid.className = "exam-file-grid";
+        files.forEach(file => grid.appendChild(renderExamFile(file)));
+        frag.appendChild(grid);
+    }
+
+    return frag;
+}
+
+function countExamFiles(node) {
+    if (node.type === "file") return 1;
+    return (node.children || []).reduce((sum, child) => sum + countExamFiles(child), 0);
+}
+
+function renderExamFile(file) {
+    const probe = `${file.mimeType || ""} ${file.name}`;
+    const match = EXAM_FILE_ICONS.find(entry => entry.test.test(probe)) || { cls: "other", icon: "fa-file" };
+    const sub = [file.modified, formatFileSize(file.size)].filter(Boolean).join(" · ");
+
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "exam-file-card";
+    card.innerHTML = `
+        <span class="exam-file-icon ${match.cls}"><i class="fa-solid ${match.icon}"></i></span>
+        <span class="exam-file-meta">
+            <span class="exam-file-name">${escapeHtml(file.name)}</span>
+            <span class="exam-file-sub">${escapeHtml(sub)}</span>
+        </span>
+    `;
+    card.title = file.name;
+    card.addEventListener("click", () => openExamFile(file, card));
+    return card;
+}
+
+function openExamFile(file, card) {
+    // 先在點擊（使用者手勢）裡開好空白分頁，等網址回來再導過去；
+    // 等 fetch 完成才 window.open 會被瀏覽器的彈出視窗封鎖擋掉
+    const tab = window.open("about:blank", "_blank");
+    if (tab) tab.opener = null;
+
+    card.disabled = true;
+    callAPI({ action: "get_exam_file_url", handle: file.handle })
+        .then(res => {
+            if (res.success && res.url) {
+                if (tab) tab.location.href = res.url;
+                else showToast("瀏覽器擋下了新分頁，請允許此網站開啟彈出視窗", "error");
+            } else {
+                if (tab) tab.close();
+                showToast(res.error || "無法開啟檔案", "error");
+            }
+        })
+        .catch(err => {
+            // 401 時 callAPI 已經處理登出並丟出例外，這裡只負責收掉空白分頁
+            if (tab) tab.close();
+            if (err && err.message === "Unauthorized") return;
+            console.error("get_exam_file_url failed", err);
+            showToast("連線失敗，請再試一次", "error");
+        })
+        .finally(() => {
+            card.disabled = false;
+        });
+}
+
+function formatFileSize(bytes) {
+    const n = Number(bytes);
+    if (!n || isNaN(n)) return "";
+    if (n < 1024) return `${n} B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
+    return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
 // ==================== 操作紀錄 ==================== */
@@ -1309,14 +1513,28 @@ function showToast(message, type = "info") {
 
 // Clear current session storage
 function clearLocalSession() {
-    localStorage.removeItem("session_token");
-    localStorage.removeItem("session_expiry");
+    // 舊版曾把 token 存進 localStorage，這裡順手清掉殘留
+    try {
+        LEGACY_SESSION_KEYS.forEach(key => localStorage.removeItem(key));
+    } catch (e) {
+        // 瀏覽器封鎖儲存空間時會丟例外，本來就沒有殘留可清
+    }
+
     state.sessionToken = null;
     state.sessionExpiry = null;
     state.pairId = null;
     state.pollKey = null;
     state.infographicCache = {};
     state.infographicPending = null;
+    state.examTree = null;
+    clearExamTreeView();
+
+    // 教師簡歷的圖含個資，隱藏的 <img> 仍握著 data URI，登出時一併清掉
+    const infographicImg = document.getElementById("infographic-image");
+    if (infographicImg) {
+        infographicImg.removeAttribute("src");
+        infographicImg.alt = "";
+    }
 
     if (state.timerInterval) clearInterval(state.timerInterval);
     if (state.pollInterval) clearInterval(state.pollInterval);
