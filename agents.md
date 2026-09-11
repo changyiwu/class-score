@@ -190,6 +190,7 @@ class-score/
 - 修改共用檔案前先讀最新內容，避免覆蓋其他 Agent 的變更
 - 所有回應與文件使用繁體中文
 - 修改前先確認計畫，優先保留原有資料結構
+- **PowerShell 下的多行 commit 訊息一律用 Write 工具寫進暫存檔，再 `git commit -F <檔案路徑>`**。不要用 `git commit -F - @'...'@`：here-string 會被當成 pathspec 參數而不是 stdin，commit 失敗，接在後面的 `git push` 還會回「Everything up-to-date」，看起來像成功
 
 ## 技術規範
 
