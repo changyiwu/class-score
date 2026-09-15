@@ -198,7 +198,10 @@ body {
     padding: 4px;
     border-radius: var(--border-radius-sm);
     border: 1px solid var(--border-glass);
-    max-width: 40vw; /* 讓出寬度給頁首右側的資訊圖表連結，否則 1080p 上會擠掉登出鈕 */
+    /* 讓出寬度給頁首右側的按鈕列，否則會擠掉登出鈕。920px ≈ 左側 logo（221）＋右側按鈕列（553）
+       ＋頁首內距（48）＋左右各約 20px 留白；右側再加東西就要跟著調大（見 agents.md〈UI/UX 設計〉） */
+    max-width: 40vw;
+    max-width: clamp(160px, calc(100vw - 920px), 40vw);
     overflow-x: auto;
     scrollbar-width: none; /* Hide scrollbar for clean tab look */
 }
@@ -1575,4 +1578,624 @@ input[type="text"]:focus, input[type="number"]:focus, input[type="password"]:foc
 
 @media (max-width: 768px) {
     .infographic-image { max-height: calc(88vh - 160px); }
+}
+
+/* ==================== 幸運抽籤 ==================== */
+.raffle-open-btn i {
+    color: #fbbf24;
+}
+
+.modal-raffle {
+    max-width: min(1100px, 95vw);
+}
+
+.raffle-class-name {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--accent-blue);
+    padding: 2px 10px;
+    border-radius: 999px;
+    background: rgba(6, 182, 212, 0.12);
+    border: 1px solid rgba(6, 182, 212, 0.3);
+}
+
+.raffle-class-name:empty {
+    display: none;
+}
+
+.raffle-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 240px;
+    gap: 20px;
+}
+
+.raffle-main {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-width: 0;
+}
+
+.raffle-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px 20px;
+}
+
+.raffle-modes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.raffle-mode-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    font-family: var(--font-body);
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    background: var(--bg-glass);
+    border: 1px solid var(--border-glass);
+    border-radius: var(--border-radius-sm);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all var(--transition-fast);
+}
+
+.raffle-mode-btn:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.raffle-mode-btn.active {
+    color: var(--accent-blue);
+    background: rgba(6, 182, 212, 0.15);
+    border-color: var(--accent-blue);
+    box-shadow: 0 0 14px rgba(6, 182, 212, 0.3);
+}
+
+.raffle-mode-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+
+.raffle-options {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 20px;
+    font-size: 0.88rem;
+    color: var(--text-secondary);
+}
+
+.raffle-count-control,
+.raffle-exclude-control {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    user-select: none;
+}
+
+.raffle-exclude-control {
+    cursor: pointer;
+}
+
+.raffle-exclude-control input {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--accent-blue);
+}
+
+.raffle-count-control input {
+    width: 64px;
+    padding: 6px 8px;
+    font-family: var(--font-body);
+    font-size: 0.95rem;
+    text-align: center;
+    color: var(--text-primary);
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid var(--border-glass);
+    border-radius: 6px;
+}
+
+.raffle-count-control input:disabled {
+    opacity: 0.55;
+}
+
+/* 舞台高度跟著視窗高度走：1366×768 的筆電上整個視窗不必捲動就看得到開始鈕 */
+.raffle-stage {
+    position: relative;
+    height: clamp(260px, calc(88vh - 240px), 520px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    background: rgba(5, 4, 15, 0.45);
+    border: 1px dashed var(--border-glass);
+    border-radius: var(--border-radius-md);
+    container-type: size;
+}
+
+/* 轉盤取舞台寬高較小的一邊；cq 單位不支援的舊瀏覽器退回固定 360px */
+.raffle-wheel {
+    position: relative;
+    width: 360px;
+    max-width: 92%;
+    width: min(92cqw, 92cqh);
+    aspect-ratio: 1 / 1;
+}
+
+.raffle-wheel canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.raffle-wheel-pointer {
+    position: absolute;
+    top: -4px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 15px solid transparent;
+    border-right: 15px solid transparent;
+    border-top: 30px solid var(--accent-red);
+    z-index: 2;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+}
+
+.raffle-slot {
+    position: relative;
+    width: min(560px, 88%);
+    height: 120px; /* 必須與 RAFFLE_SLOT_ITEM_PX 一致 */
+    overflow: hidden;
+    border-radius: var(--border-radius-md);
+    background: #070812;
+    border: 2px solid var(--border-glass);
+    box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.8);
+}
+
+.raffle-slot-reel {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+}
+
+.raffle-slot-item {
+    height: 120px;
+    line-height: 120px;
+    padding: 0 16px;
+    text-align: center;
+    font-family: var(--font-heading);
+    font-size: clamp(36px, 4.5vw, 60px);
+    font-weight: 700;
+    color: var(--accent-blue);
+    text-shadow: 0 0 10px rgba(6, 182, 212, 0.6);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.raffle-cards {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    justify-content: center;
+    gap: 12px;
+    padding: 16px;
+    overflow-y: auto;
+}
+
+.raffle-flip-card {
+    width: 96px;
+    height: 124px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    perspective: 800px;
+}
+
+.raffle-flip-inner {
+    display: block;
+    position: relative;
+    width: 100%;
+    height: 100%;
+    transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    transform-style: preserve-3d;
+}
+
+.raffle-flip-card.flipped .raffle-flip-inner {
+    transform: rotateY(180deg);
+}
+
+.raffle-flip-front,
+.raffle-flip-back {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 8px;
+    border-radius: var(--border-radius-sm);
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+}
+
+.raffle-flip-front {
+    font-size: 1.6rem;
+    color: var(--accent-purple);
+    background: linear-gradient(135deg, #2b2f4a, #181a2e);
+    border: 2px solid var(--accent-purple);
+    box-shadow: var(--shadow-sm);
+}
+
+.raffle-flip-back {
+    color: white;
+    background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+    border: 2px solid var(--text-primary);
+    transform: rotateY(180deg);
+}
+
+.raffle-flip-seat {
+    font-family: var(--font-heading);
+    font-size: 1.35rem;
+    font-weight: 700;
+}
+
+.raffle-flip-name {
+    max-width: 100%;
+    font-size: 0.85rem;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.raffle-empty {
+    align-self: center;
+    margin: auto;
+    color: var(--text-muted);
+}
+
+/* 中籤畫面：內容比舞台高時要能捲動，所以不用 justify-content: center
+   （那會把上緣裁掉），改用頭尾兩個 auto margin 置中 */
+.raffle-winner-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    padding: 20px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    background: rgba(5, 4, 15, 0.93);
+    animation: raffle-pop-in 0.3s ease;
+}
+
+@keyframes raffle-pop-in {
+    from { opacity: 0; transform: scale(0.96); }
+    to   { opacity: 1; transform: scale(1); }
+}
+
+.raffle-winner-title {
+    margin-top: auto;
+    font-size: clamp(1rem, 1.8vw, 1.3rem);
+    letter-spacing: 2px;
+    color: var(--text-secondary);
+    text-align: center;
+}
+
+.raffle-winner-list {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 12px;
+    width: 100%; /* 需要滿版：否則子項的 max-width 會退回自己的內容寬度，短名字也被切成「…」 */
+}
+
+.raffle-winner-actions {
+    margin-bottom: auto;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+}
+
+.raffle-winner-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    max-width: 100%;
+    padding: 8px 24px 16px;
+    border-radius: var(--border-radius-md);
+}
+
+.raffle-winner-seat {
+    font-family: var(--font-heading);
+    font-size: clamp(56px, 7vw, 96px);
+    font-weight: 700;
+    line-height: 1;
+    color: var(--accent-blue);
+    text-shadow: 0 0 20px rgba(6, 182, 212, 0.8);
+    animation: raffle-winner-pulse 1.5s ease-in-out infinite;
+}
+
+.raffle-winner-name {
+    max-width: 100%;
+    font-size: clamp(28px, 3.4vw, 46px);
+    font-weight: 700;
+    line-height: 1.15;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+@keyframes raffle-winner-pulse {
+    0%, 100% { transform: scale(1); }
+    50%      { transform: scale(1.05); }
+}
+
+.raffle-winner-score {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 1.6em;
+    font-size: 1rem;
+    color: var(--text-secondary);
+}
+
+.raffle-score-value.positive { color: var(--accent-green); font-weight: 600; }
+.raffle-score-value.negative { color: var(--accent-red);   font-weight: 600; }
+
+.raffle-awarded-tag {
+    padding: 1px 8px;
+    font-size: 0.8rem;
+    color: var(--accent-green);
+    border-radius: 999px;
+    background: rgba(16, 185, 129, 0.12);
+    border: 1px solid rgba(16, 185, 129, 0.35);
+}
+
+/* 加分鈕用與學生卡片 ＋ 相同的綠色語意，觸控大螢幕上要夠大 */
+.raffle-bonus-btn,
+.raffle-bonus-all-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-family: var(--font-heading);
+    font-weight: 600;
+    color: var(--accent-green);
+    background: rgba(16, 185, 129, 0.15);
+    border: 1px solid rgba(16, 185, 129, 0.45);
+    border-radius: var(--border-radius-sm);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.raffle-bonus-btn {
+    padding: 12px 30px;
+    font-size: 1.15rem;
+}
+
+.raffle-bonus-btn:hover,
+.raffle-bonus-all-btn:hover {
+    color: white;
+    background: var(--accent-green);
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.35);
+}
+
+.raffle-bonus-btn:active,
+.raffle-bonus-all-btn:active {
+    transform: scale(0.96);
+}
+
+/* 多位中籤：每位縮成一張小卡排開 */
+.raffle-winner-list.is-multi .raffle-winner-card {
+    width: 180px;
+    padding: 12px 12px 14px;
+    gap: 6px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border-glass);
+}
+
+.raffle-winner-list.is-multi .raffle-winner-seat {
+    font-size: clamp(30px, 3vw, 40px);
+    animation: none;
+}
+
+.raffle-winner-list.is-multi .raffle-winner-name {
+    font-size: clamp(18px, 1.8vw, 24px);
+}
+
+.raffle-winner-list.is-multi .raffle-winner-score {
+    font-size: 0.88rem;
+}
+
+.raffle-winner-list.is-multi .raffle-bonus-btn {
+    width: 100%;
+    padding: 8px 10px;
+    font-size: 1rem;
+}
+
+.raffle-bonus-all-btn {
+    padding: 10px 20px;
+    font-size: 1rem;
+}
+
+.raffle-winner-card.raffle-bonus-pop {
+    animation: raffle-bonus-pop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes raffle-bonus-pop {
+    0%   { transform: scale(1);    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.6); }
+    35%  { transform: scale(1.06); }
+    100% { transform: scale(1);    box-shadow: 0 0 0 22px rgba(16, 185, 129, 0); }
+}
+
+/* 星星沿用 .praise-star，射出點放在中籤畫面上方三分之一 */
+.raffle-burst {
+    position: absolute;
+    top: 34%;
+    left: 50%;
+    pointer-events: none;
+}
+
+.raffle-hint {
+    margin: 0;
+    text-align: center;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+.raffle-controls {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 12px;
+}
+
+.raffle-start-btn {
+    padding: 12px 40px;
+    font-size: 1.05rem;
+}
+
+.raffle-controls .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+/* contain: size 讓紀錄欄不參與決定列高，長紀錄只在欄內捲動，不會把整個視窗撐高 */
+.raffle-side {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 0;
+    padding-left: 20px;
+    border-left: 1px solid var(--border-glass);
+    contain: size;
+}
+
+.raffle-side-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.raffle-side-head h4 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-heading);
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.raffle-side-head h4 i {
+    color: var(--accent-blue);
+}
+
+.raffle-pool-status {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.raffle-history {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.raffle-history-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 12px;
+    font-size: 0.9rem;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border-glass);
+    border-radius: var(--border-radius-sm);
+}
+
+.raffle-history-name {
+    min-width: 0;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.raffle-history-time {
+    flex-shrink: 0;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.raffle-history-empty {
+    padding: 24px 8px;
+    text-align: center;
+    font-size: 0.88rem;
+    color: var(--text-muted);
+}
+
+@media (max-width: 900px) {
+    .raffle-body {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .raffle-side {
+        contain: none;
+        max-height: 260px;
+        padding-left: 0;
+        padding-top: 16px;
+        border-left: none;
+        border-top: 1px solid var(--border-glass);
+    }
+}
+
+@media (max-width: 768px) {
+    .raffle-mode-btn {
+        flex: 1 1 auto;
+        justify-content: center;
+        min-height: 44px;
+    }
+
+    .raffle-stage {
+        height: 340px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .raffle-burst { display: none; }
+    .raffle-flip-inner { transition: none; }
+    .raffle-winner-overlay,
+    .raffle-winner-seat,
+    .raffle-winner-card.raffle-bonus-pop { animation: none; }
 }

@@ -47,6 +47,9 @@
                 </div>
                 
                 <div class="header-right">
+                    <button type="button" id="btn-raffle" class="action-btn raffle-open-btn" title="從目前班級抽出座號">
+                        <i class="fa-solid fa-dice"></i> 幸運抽籤
+                    </button>
                     <!-- 四張資訊圖表收進一顆下拉選單，頁首寬度有預算（見 agents.md〈UI/UX 設計〉） -->
                     <div class="header-menu">
                         <button type="button" id="btn-infographic-menu" class="action-btn"
@@ -316,11 +319,95 @@
             </div>
         </div>
 
+        <!-- ==================== MODAL: 幸運抽籤 ==================== -->
+        <!-- 名單直接取目前開啟的班級；抽籤名單與紀錄只存記憶體，登出即清空 -->
+        <div id="modal-raffle" class="modal-overlay hidden">
+            <div class="modal modal-lg modal-raffle">
+                <div class="modal-header">
+                    <h3><i class="fa-solid fa-dice"></i> 幸運抽籤 <span id="raffle-class-name" class="raffle-class-name"></span></h3>
+                    <button type="button" class="modal-close" data-close-modal="modal-raffle" aria-label="關閉">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+                <div class="modal-body raffle-body">
+                    <div class="raffle-main">
+                        <div class="raffle-toolbar">
+                            <div class="raffle-modes" role="group" aria-label="抽籤方式">
+                                <button type="button" class="raffle-mode-btn active" data-raffle-mode="wheel">
+                                    <i class="fa-solid fa-circle-dot"></i> 幸運大轉盤
+                                </button>
+                                <button type="button" class="raffle-mode-btn" data-raffle-mode="slot">
+                                    <i class="fa-solid fa-square-poll-vertical"></i> 滾動拉霸機
+                                </button>
+                                <button type="button" class="raffle-mode-btn" data-raffle-mode="cards">
+                                    <i class="fa-solid fa-address-card"></i> 神秘翻牌
+                                </button>
+                            </div>
+                            <div class="raffle-options">
+                                <label class="raffle-count-control" for="raffle-draw-count">
+                                    <span>一次抽</span>
+                                    <input type="number" id="raffle-draw-count" value="1" min="1" max="1" step="1" inputmode="numeric">
+                                    <span>位</span>
+                                </label>
+                                <label class="raffle-exclude-control">
+                                    <input type="checkbox" id="raffle-exclude">
+                                    <span>不重複抽（排除已抽中）</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div id="raffle-stage" class="raffle-stage">
+                            <div id="raffle-arena-wheel" class="raffle-wheel">
+                                <div class="raffle-wheel-pointer"></div>
+                                <canvas id="raffle-wheel-canvas" width="800" height="800" role="img" aria-label="目前班級的抽籤轉盤"></canvas>
+                            </div>
+                            <div id="raffle-arena-slot" class="raffle-slot hidden">
+                                <div id="raffle-slot-reel" class="raffle-slot-reel"></div>
+                            </div>
+                            <div id="raffle-arena-cards" class="raffle-cards hidden"></div>
+
+                            <div id="raffle-winner" class="raffle-winner-overlay hidden">
+                                <div id="raffle-winner-title" class="raffle-winner-title">🎉 恭喜中籤者 🎉</div>
+                                <div id="raffle-winner-list" class="raffle-winner-list"></div>
+                                <div class="raffle-winner-actions">
+                                    <button type="button" id="btn-raffle-bonus-all" class="btn raffle-bonus-all-btn hidden">
+                                        <i class="fa-solid fa-plus"></i> <span id="raffle-bonus-all-text">全部加分</span>
+                                    </button>
+                                    <button type="button" id="btn-raffle-done" class="btn btn-secondary">完成</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <p id="raffle-hint" class="raffle-hint hidden" role="status"></p>
+
+                        <div class="raffle-controls">
+                            <button type="button" id="btn-raffle-start" class="btn btn-primary raffle-start-btn">
+                                <i class="fa-solid fa-play"></i> 開始抽籤
+                            </button>
+                            <button type="button" id="btn-raffle-reset" class="btn btn-secondary">
+                                <i class="fa-solid fa-rotate-left"></i> 重置名單
+                            </button>
+                        </div>
+                    </div>
+
+                    <aside class="raffle-side">
+                        <div class="raffle-side-head">
+                            <h4><i class="fa-solid fa-clock-rotate-left"></i> 抽籤紀錄</h4>
+                            <button type="button" id="btn-raffle-clear-history" class="action-btn">清空</button>
+                        </div>
+                        <div id="raffle-pool-status" class="raffle-pool-status"></div>
+                        <div id="raffle-history" class="raffle-history"></div>
+                    </aside>
+                </div>
+            </div>
+        </div>
+
     </div>
 
     <!-- Toast Notification Container -->
     <div id="toast-container" class="toast-container"></div>
 
     <script src="app.js"></script>
+    <script src="raffle.js"></script>
 </body>
 </html>

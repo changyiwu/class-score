@@ -68,6 +68,7 @@ const state = {
     classes: [],
     currentClass: null,
     students: [],
+    studentsClass: null, // students 屬於哪個班級；切換分頁到資料回來之前，它與 currentClass 會不一致
     currentLogs: [],   // 紀錄視窗當下載入的那批，供匯出 CSV 使用
     infographicCache: {},  // key -> { dataUri, alt }，同一次登入內只跟後端要一次
     infographicPending: null,  // 目前等待中的圖表 key，用來丟棄過期的回應
@@ -523,6 +524,7 @@ function loadClassData(className) {
             showLoading(false);
             if (res.success) {
                 state.students = res.students;
+                state.studentsClass = className;
                 document.getElementById("current-class-name").innerText = className;
                 document.getElementById("stat-student-count").innerText = state.students.length;
                 renderStudentGrid();
@@ -539,14 +541,16 @@ function loadClassData(className) {
 }
 
 // Update student score (Optimistic update)
+// 回傳 Promise<boolean>：後端確認寫入才是 true。抽籤視窗的加分鈕靠它更新畫面上的分數
 function changeScore(seatNumber, delta) {
     const card = document.querySelector(`.student-card[data-seat="${seatNumber}"]`);
+    if (!card) return Promise.resolve(false);
     const scoreValEl = card.querySelector(".student-score");
     const scoreWrapper = card.querySelector(".student-score-wrapper");
-    
+
     // Find current local state
     const studentIdx = state.students.findIndex(s => s.seat === seatNumber);
-    if (studentIdx === -1) return;
+    if (studentIdx === -1) return Promise.resolve(false);
     
     const oldScore = state.students[studentIdx].score;
     const newScore = oldScore + delta;
@@ -577,12 +581,12 @@ function changeScore(seatNumber, delta) {
     
     // 2. Send request to backend
     card.classList.add("updating");
-    
-    callAPI({ 
-        action: "update_score", 
-        className: state.currentClass, 
-        seatNumber: seatNumber, 
-        scoreChange: delta 
+
+    return callAPI({
+        action: "update_score",
+        className: state.currentClass,
+        seatNumber: seatNumber,
+        scoreChange: delta
     })
     .then(res => {
         card.classList.remove("updating");
@@ -591,6 +595,7 @@ function changeScore(seatNumber, delta) {
             state.students[studentIdx].score = res.newScore;
             scoreValEl.innerText = res.newScore >= 0 ? `+${res.newScore}` : res.newScore;
             updateTopThreeLeaderboard();
+            return true;
         } else {
             // Revert on backend error
             state.students[studentIdx].score = oldScore;
@@ -599,8 +604,9 @@ function changeScore(seatNumber, delta) {
             if (oldScore > 0) scoreValEl.classList.add("positive");
             if (oldScore < 0) scoreValEl.classList.add("negative");
             updateTopThreeLeaderboard();
-            
+
             showToast("寫入失敗，數值已復原！", "error");
+            return false;
         }
     })
     .catch(err => {
@@ -615,6 +621,7 @@ function changeScore(seatNumber, delta) {
         
         showToast("網路錯誤，更新失敗！", "error");
         console.error(err);
+        return false;
     });
 }
 
@@ -1064,6 +1071,7 @@ function closeModal(id) {
     const el = document.getElementById(id);
     if (el) el.classList.add("hidden");
     if (id === "modal-exam") clearExamTreeView();
+    if (id === "modal-raffle") abortRaffle(); // 轉到一半關掉視窗，動畫與計時器都要停
 }
 
 // ==================== 課堂資訊圖表 ==================== */
@@ -1528,6 +1536,8 @@ function clearLocalSession() {
     state.infographicPending = null;
     state.examTree = null;
     clearExamTreeView();
+    state.studentsClass = null;
+    clearRaffleState(); // 抽籤名單與紀錄含學生姓名，跟著 session 一起清掉
 
     // 教師簡歷的圖含個資，隱藏的 <img> 仍握著 data URI，登出時一併清掉
     const infographicImg = document.getElementById("infographic-image");
