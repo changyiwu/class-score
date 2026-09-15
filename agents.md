@@ -49,6 +49,7 @@
 - [x] 考卷檢討**真人登入實測**通過（2026-09-11，使用者登入後確認）
 - [x] `exam-review` 退場（2026-09-11）：舊 GAS 部署停用（舊 `/exec` 已連不上）、`考卷檢討-後台` 資料夾連同設定試算表與 GAS 專案移入 Drive 垃圾桶、`teaching-web` 側邊欄的考卷檢討卡片移除、GitHub repo 由使用者刪除（舊網址回 404）
 - [x] 幸運抽籤（2026-09-15）：頁首一鍵開 modal，名單接目前班級，轉盤／拉霸／翻牌、一次抽 N 位、不重複抽，中籤後可直接加分
+- [x] 抽籤名單與紀錄改存 `localStorage`，只存座號與時間戳（2026-09-15）
 - [ ] 幸運抽籤**真人實測**：轉盤與拉霸的動畫節奏、tick／中籤音效、真的連上後端加分（Agent 環境窗格隱藏時 rAF 不跑，只以同步替身驗過邏輯與版面）
 - [ ] 功能面待辦：PWA manifest
 
@@ -193,7 +194,9 @@ class-score/
 
 - **名單一律取 `state.students`（目前開啟的班級）**，不另打 API。開視窗前必須確認 `state.studentsClass === state.currentClass`：切換分頁到資料回來之前兩者不一致，這時開抽籤會抽到上一班的名單
 - **加分一律走 `changeScore`**（它回傳 `Promise<boolean>`，後端確認才是 `true`），不要在 `raffle.js` 另寫 `update_score` 呼叫——樂觀更新、`_Log`、失敗復原、加分動畫與音效都在那條路上。中籤畫面的「已加 N」靠這個 Promise 在失敗時扣回
-- **抽籤名單與紀錄只存記憶體**（`raffle.byClass`，存「已抽出的座號」而非剩餘名單，所以試算表增刪座號後自動同步），**不進 `localStorage`**：紀錄含學生姓名，理由同 session。登出由 `clearLocalSession` 呼叫 `clearRaffleState` 清掉，連 canvas 上畫的姓名一起抹掉
+- **抽籤名單、紀錄與設定存在 `localStorage`（key `class_score_raffle_v1`），但只存座號與時間戳，絕不存姓名**（2026-09-15 應使用者要求，讓紀錄跨重新整理與登出保留）：教室大螢幕任何人都走得到，姓名一律在登入後由 `state.students` 即時組字。存「已抽出的座號」而非剩餘名單，試算表增刪座號後自動同步。每次開視窗都重讀（`loadRaffleStore`），讀不到或壞掉就當作沒紀錄
+- **登出時 `clearRaffleState` 只清記憶體快取與畫面**（含 canvas 上畫的姓名），**不刪 `localStorage`**。要讓紀錄跟 session 一起消失，得另外改這裡
+- **`raffle.byClass` 必須是 `Object.create(null)`**：班級名稱可以叫 `constructor`，普通物件會直接取到原型上的函式，讓那一班的抽籤壞掉
 - **「一次抽 N 位」N 位都必須是動畫抽出來的**（沿用 `class-tools-2` 的規則）：轉盤停下後指針逐格往前掃、拉霸依序停在每位中籤者、翻牌要翻滿 N 張。不要退回「抽一位再隨機補齊」
 - **抽籤裡的計時器與動畫幀一律走 `raffleLater`／`raffleFrame`**，不要直接 `setTimeout`／`requestAnimationFrame`：關閉視窗（含 Esc、點背景、登出）時 `abortRaffle` 以 `raffle.epoch` 作廢所有排隊中的回呼，直接呼叫的會在視窗關掉後繼續改畫面
 - 中籤畫面開著時 `raffle.isDrawing` 維持 `true`（鎖住開始、重置、模式、人數），按「完成」才解鎖

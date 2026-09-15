@@ -4,8 +4,9 @@
  * 名單改接目前開啟的班級，抽出後可直接替中籤座號加分——走 app.js 的 changeScore，
  * 與學生卡片上的 ＋ 是同一條路（樂觀更新、寫入 _Log、失敗自動復原）。
  *
- * ⚠️ 抽籤名單與紀錄只存記憶體、不進 localStorage：紀錄含學生姓名，
- * 教室大螢幕又是任何人都走得到的裝置。登出（含逾時）即清空，與 session 的處理一致。
+ * 抽籤名單（已抽出的座號）、紀錄與設定存在 localStorage，重新整理、登出後都還在。
+ * ⚠️ localStorage 只存座號與時間戳，絕不存姓名：教室大螢幕是任何人都走得到的裝置，
+ * 姓名一律在登入後由 state.students 即時組字。登出只清記憶體快取與畫面，不刪 localStorage。
  */
 
 // 多位中籤時，指針每掃一格的動畫與停留時間（沿用 class-tools-2 的節奏）
@@ -14,8 +15,9 @@ const RAFFLE_SWEEP_HOLD_MS = 420;
 const RAFFLE_SLOT_SPIN_MS = 4000;
 const RAFFLE_SLOT_ITEM_PX = 120;   // 必須與 .raffle-slot-item 的高度一致
 const RAFFLE_WHEEL_SIZE = 400;     // 轉盤的邏輯尺寸；canvas 以兩倍解析度繪製，大螢幕上字才不糊
-const RAFFLE_HISTORY_LIMIT = 100;
+const RAFFLE_HISTORY_LIMIT = 100;   // 每個班級保留的紀錄筆數
 const RAFFLE_MODES = ["wheel", "slot", "cards"];
+const RAFFLE_STORAGE_KEY = "class_score_raffle_v1";
 
 // 中籤後加分鈕一次加幾分（後端單次上限 ±10）
 const RAFFLE_BONUS_POINTS = 1;
@@ -32,7 +34,9 @@ const raffle = {
     mode: "wheel",
     drawCount: 1,
     exclude: false,
-    byClass: {},        // 班級名稱 -> { drawn: [已抽出的座號], history: [{ label, time }] }
+    // 班級名稱 -> { drawn: [已抽出的座號], history: [{ seat, at }] }。
+    // 用無原型物件：班級可以叫 constructor，普通物件會取到原型上的函式
+    byClass: Object.create(null),
     className: null,    // 目前視窗對應的班級
     pool: [],           // 這一輪還抽得到的座號
     isDrawing: false,   // 動畫進行中或中籤畫面還開著，此時鎖住所有控制項
@@ -66,10 +70,12 @@ function setupRaffleListeners() {
         countInput.value = raffle.drawCount;
         resetRaffleCardPicks();
         updateRaffleHint();
+        saveRaffleStore();
     });
 
     document.getElementById("raffle-exclude").addEventListener("change", (e) => {
         raffle.exclude = e.target.checked;
+        saveRaffleStore();
     });
 
     document.getElementById("btn-raffle-start").addEventListener("click", startRaffleDraw);
@@ -138,10 +144,72 @@ function raffleEntry() {
     return raffle.byClass[raffle.className] || null;
 }
 
-function raffleTimeText() {
-    const d = new Date();
+// 紀錄會跨天保留：今天的只顯示時間，其他天的加上日期
+function raffleTimeLabel(at) {
+    const d = new Date(at);
     const pad = n => String(n).padStart(2, "0");
-    return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    const time = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    return d.toDateString() === new Date().toDateString()
+        ? `${time}:${pad(d.getSeconds())}`
+        : `${d.getMonth() + 1}/${d.getDate()} ${time}`;
+}
+
+// ==================== localStorage ==================== */
+
+const isRaffleSeat = seat => typeof seat === "number" || (typeof seat === "string" && seat !== "");
+
+// 每次開視窗都從 localStorage 重讀，壞掉或被瀏覽器封鎖就當作沒有紀錄，不影響抽籤本身
+function loadRaffleStore() {
+    let saved = null;
+    try {
+        saved = JSON.parse(localStorage.getItem(RAFFLE_STORAGE_KEY) || "null");
+    } catch (e) {
+        saved = null;
+    }
+    const data = saved && typeof saved === "object" ? saved : {};
+
+    raffle.mode = RAFFLE_MODES.indexOf(data.mode) !== -1 ? data.mode : "wheel";
+    raffle.drawCount = parseInt(data.drawCount, 10) || 1;
+    raffle.exclude = data.exclude === true;
+    raffle.byClass = Object.create(null);
+
+    const classes = data.classes && typeof data.classes === "object" ? data.classes : {};
+    Object.keys(classes).forEach(className => {
+        const item = classes[className];
+        if (!item || typeof item !== "object") return;
+        raffle.byClass[className] = {
+            drawn: Array.isArray(item.drawn) ? item.drawn.filter(isRaffleSeat) : [],
+            history: Array.isArray(item.history)
+                ? item.history
+                    .filter(h => h && isRaffleSeat(h.seat) && Number.isFinite(h.at))
+                    .map(h => ({ seat: h.seat, at: h.at }))
+                    .slice(0, RAFFLE_HISTORY_LIMIT)
+                : []
+        };
+    });
+}
+
+// 只寫座號與時間戳。姓名是個資，不可以寫進來（見檔案開頭說明）
+function saveRaffleStore() {
+    const classes = {};
+    Object.keys(raffle.byClass).forEach(className => {
+        const entry = raffle.byClass[className];
+        classes[className] = {
+            drawn: entry.drawn.slice(),
+            history: entry.history.map(h => ({ seat: h.seat, at: h.at }))
+        };
+    });
+
+    try {
+        localStorage.setItem(RAFFLE_STORAGE_KEY, JSON.stringify({
+            mode: raffle.mode,
+            drawCount: raffle.drawCount,
+            exclude: raffle.exclude,
+            classes
+        }));
+    } catch (e) {
+        // 空間已滿或被封鎖：這一次登入內仍照常運作，只是不會留到下次
+    }
 }
 
 // ==================== 開啟與狀態 ==================== */
@@ -163,6 +231,7 @@ function openRaffle() {
         return;
     }
 
+    loadRaffleStore();
     syncRaffleClass(className);
     document.getElementById("raffle-class-name").textContent = className;
     openModal("modal-raffle");
@@ -208,6 +277,7 @@ function setRaffleMode(mode) {
     applyRaffleMode();
     renderRaffleArena();
     updateRaffleHint();
+    saveRaffleStore();
 }
 
 // 抽籤中（含中籤畫面還開著）鎖住會改變名單或模式的控制項
@@ -294,10 +364,10 @@ function renderRaffleHistory() {
         row.className = "raffle-history-item";
         const name = document.createElement("span");
         name.className = "raffle-history-name";
-        name.textContent = item.label;
+        name.textContent = raffleLabel(item.seat); // 姓名不在 localStorage，顯示時才組字
         const time = document.createElement("span");
         time.className = "raffle-history-time";
-        time.textContent = item.time;
+        time.textContent = raffleTimeLabel(item.at);
         row.append(name, time);
         container.appendChild(row);
     });
@@ -308,6 +378,7 @@ function clearRaffleHistory() {
     if (!entry) return;
     entry.history = [];
     renderRaffleHistory();
+    saveRaffleStore();
 }
 
 function resetRafflePool() {
@@ -322,6 +393,7 @@ function resetRafflePool() {
     renderRaffleArena();
     renderRafflePoolStatus();
     updateRaffleHint();
+    saveRaffleStore();
     showToast("抽籤名單已重置", "success");
 }
 
@@ -801,9 +873,9 @@ function finishRaffleDraw(picks) {
     // 紀錄：先抽到的排在最上面
     const entry = raffleEntry();
     if (entry) {
-        const time = raffleTimeText();
+        const at = Date.now();
         winners.slice().reverse().forEach(w => {
-            entry.history.unshift({ label: raffleLabel(w.seat), time });
+            entry.history.unshift({ seat: w.seat, at });
         });
         entry.history.length = Math.min(entry.history.length, RAFFLE_HISTORY_LIMIT);
         renderRaffleHistory();
@@ -820,6 +892,7 @@ function finishRaffleDraw(picks) {
         renderRafflePoolStatus();
     }
 
+    saveRaffleStore();
     raffle.pendingPicks = [];
     // isDrawing 維持 true，等老師按「完成」關掉中籤畫面才解鎖
 }
@@ -994,10 +1067,11 @@ function abortRaffle() {
     if (cards) cards.replaceChildren();
 }
 
-// 登出時由 clearLocalSession 呼叫：連同各班的抽籤名單與紀錄一起丟掉
+// 登出時由 clearLocalSession 呼叫：丟掉記憶體快取與畫面上的姓名。
+// localStorage 刻意保留（只有座號），下次開抽籤視窗時重讀
 function clearRaffleState() {
     abortRaffle();
-    raffle.byClass = {};
+    raffle.byClass = Object.create(null);
     raffle.className = null;
     raffle.pool = [];
     raffle.wheelSlices = [];

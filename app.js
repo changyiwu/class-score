@@ -1537,7 +1537,7 @@ function clearLocalSession() {
     state.examTree = null;
     clearExamTreeView();
     state.studentsClass = null;
-    clearRaffleState(); // 抽籤名單與紀錄含學生姓名，跟著 session 一起清掉
+    clearRaffleState(); // 清掉畫面上的抽籤姓名與記憶體快取；localStorage 只存座號，保留
 
     // 教師簡歷的圖含個資，隱藏的 <img> 仍握著 data URI，登出時一併清掉
     const infographicImg = document.getElementById("infographic-image");
