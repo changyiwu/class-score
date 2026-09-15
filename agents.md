@@ -237,7 +237,7 @@ class-score/
 ### UI/UX 設計
 - 保持現代暗色系設計（Glassmorphism 毛玻璃視覺效果）
 - **頁首寬度是有預算的**：`.tabs-container` 的 `max-width` 為 `clamp(160px, calc(100vw - 920px), 40vw)`，讓出空間給右側的按鈕、計時器與登出鈕。`920px` ≈ 左側 logo（221）＋右側按鈕列自然寬度（553）＋頁首內距（48）＋左右各約 20px 留白，**右側加寬多少，這個常數就要跟著加多少**。再往頁首加東西前，先在 1920 與 1366 兩種寬度、8 個班級的情況下量過不會擠掉登出鈕
-- **頁首右側目前是「幸運抽籤」＋「課堂資訊 ▾」選單＋「考卷檢討」＋計時器＋登出**。資訊圖表一律加進 `#infographic-menu` 當選單項目，**不要再把圖表拆回獨立按鈕**。2026-09-15 實測（8 個班級）：1920 下分頁列 768px（40vw）、兩側間距各 137px；1366 下分頁列 446px 並內部捲動、兩側間距各 21px；1280 下分頁列 400px，登出鈕三種寬度都維持單行（只加抽籤鈕、沿用 `40vw` 時 1366 間距為 0、登出鈕折成兩行）
+- **頁首右側目前是「幸運抽籤」＋「課堂資訊 ▾」選單＋「考卷檢討」＋計時器＋登出**。資訊圖表一律加進 `#infographic-menu` 當選單項目，**不要再把圖表拆回獨立按鈕**。2026-09-15 實測（8 個班級）：1920 下分頁列 768px（40vw）、兩側間距各 135px；1366 下分頁列 446px 並內部捲動、兩側間距各 19px（併入 `.bg-glow-layer` 後重量）；1280 下分頁列 400px，登出鈕三種寬度都維持單行（只加抽籤鈕、沿用 `40vw` 時 1366 間距為 0、登出鈕折成兩行）
 - 選單以觸控為主：項目高度約 45px，點選單外面、按 Esc、點項目都會收起；手機版（≤768px）選單改成往右展開，否則會超出畫面左緣
 - 學生卡片調整分數時採**樂觀更新**（Optimistic Update），加入放大／縮小與綠／紅變色動畫
 - **加減分的回饋刻意不對稱**：加分播完整鼓勵動畫（`playPraiseAnimation`：12 顆星迸發＋雙層震波環＋卡片彈跳＋飄升鼓勵詞，分數用 `score-pulse-up`），扣分只留原本低調的 `score-pulse`，不慶祝
@@ -245,6 +245,7 @@ class-score/
 - `.student-card` 為了讓特效衝出卡片外而使用 `overflow: visible`，因此**載入遮罩 `.updating::after` 必須自帶 `border-radius: inherit`** 才不會露出直角
 - 每次加分建立獨立的 `.praise-layer` 並於 1.4 秒後自行移除，連點時互不打斷；`.card-praise` 於 `animationend` 移除，避免 `z-index: 10` 永久殘留（監聽器須過濾 `animationName`，子元素動畫會冒泡）
 - 動畫一律尊重 `prefers-reduced-motion: reduce`
+- **超出畫面的裝飾元素要自己裁掉水平溢出，不能指望 `body { overflow-x: hidden }`**：body 的 overflow 會轉交給 viewport，手機瀏覽器照樣依內容寬度撐大 layout viewport，整頁被縮小，`position: fixed` 的 modal 也跟著超出畫面右緣。背景光暈因此包在 `.bg-glow-layer`（`overflow-x: clip`）裡，**不可改成 `overflow: hidden`**：垂直也會被裁，1920 下光暈撐出的捲動高度消失、捲軸跟著不見，整個版面位移 8px。手機版（≤768px）的 flex 列一律允許換行（例如 `.class-info-header`）。改版面後要在 400px 寬量過 `document.documentElement.scrollWidth` 等於 `clientWidth`
 
 ### 音效
 - 加分音效以 **Web Audio API 即時合成**（`playPraiseSound`），**不放音檔、不引外部資源**——延續「關鍵資源不依賴外部請求」的約定，也避免在 repo 塞二進位檔

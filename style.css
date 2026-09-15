@@ -51,6 +51,20 @@ body {
 }
 
 /* Background glows for premium visual design */
+/* 光暈固定 600px 寬、又往左右超出 10%，手機上會把 layout viewport 撐寬
+   （body 的 overflow-x: hidden 會轉交給 viewport，擋不住），整頁被縮小、
+   fixed 的 modal 也跟著超出畫面。改由這層自己裁掉水平溢出。
+   用 clip 不用 hidden：hidden 會連垂直一起裁，桌機少了光暈撐出的捲動高度，
+   捲軸一消失版面就整體位移 8px。inset: 0 與 body 同大，光暈的 % 定位不變 */
+.bg-glow-layer {
+    position: absolute;
+    inset: 0;
+    overflow-x: clip;
+    overflow-y: visible;
+    z-index: -1;
+    pointer-events: none;
+}
+
 .bg-glow {
     position: absolute;
     border-radius: 50%;
@@ -1574,6 +1588,8 @@ input[type="text"]:focus, input[type="number"]:focus, input[type="password"]:foc
 @media (max-width: 768px) {
     .modal-overlay { padding: 12px; }
     .class-stats { justify-content: flex-start; }
+    /* 前三名膠囊自然寬約 300px，不換行時會把學生人數與按鈕推出畫面右緣、撐寬整頁 */
+    .class-info-header { flex-wrap: wrap; gap: 12px; }
 }
 
 @media (max-width: 768px) {
