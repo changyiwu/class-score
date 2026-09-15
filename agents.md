@@ -14,7 +14,7 @@
 - 2026-09-04：新增第四張資訊圖表「課堂表現加減分」，前後端白名單與頁首按鈕一併補上（GAS `@10`）
 - 2026-08-29：資訊圖表改為登入後才看得到——圖檔壓成 WebP 移出公開 repo、改放 Drive 私有資料夾，新增 `get_infographic`（GAS `@9`），前端刪掉獨立檢視頁改用 modal；公開 repo 的 git 歷史已改寫、移除三張 png
 - 2026-09-11：併入 `exam-review` 考卷檢討（新增 `list_exam_files`／`get_exam_file_url`）；session 改為只存記憶體；頁首四張圖表收進「課堂資訊」下拉選單（**目前部署版本 GAS `@11`**）
-- 2026-09-15：新增「幸運抽籤」（移植自 `class-tools-2`，純前端 `raffle.js`，GAS 維持 `@11`）；頁首分頁列寬度改為 `clamp(160px, calc(100vw - 920px), 40vw)`
+- 2026-09-15：新增「幸運抽籤」（移植自 `class-tools-2`，純前端 `raffle.js`，GAS 維持 `@11`）；頁首分頁列寬度改為 `clamp(160px, calc(100vw - 920px), 40vw)`；抽籤名單與紀錄改存 localStorage（只存座號）；修正手機寬度下背景光暈撐寬整頁
 
 ## 目標與路線圖
 - [x] 後端 Google Apps Script API 設計與 clasp 部署
@@ -211,6 +211,7 @@ class-score/
 - 所有回應與文件使用繁體中文
 - 修改前先確認計畫，優先保留原有資料結構
 - **PowerShell 下的多行 commit 訊息一律用 Write 工具寫進暫存檔，再 `git commit -F <檔案路徑>`**。不要用 `git commit -F - @'...'@`：here-string 會被當成 pathspec 參數而不是 stdin，commit 失敗，接在後面的 `git push` 還會回「Everything up-to-date」，看起來像成功
+- **2026-08-29 之前 clone 的副本一律作廢**（當天改寫 git 歷史並刪除重建 GitHub repo）：在其他電腦接手前先 `git fetch`，確認 `git rev-list HEAD..origin/main` 與 `git rev-list origin/main..HEAD` 沒有分歧；有分歧就重新 `git clone`，**不要在舊 clone 上 pull 或 push**
 
 ## 技術規範
 
