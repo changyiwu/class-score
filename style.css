@@ -213,7 +213,7 @@ body {
     border-radius: var(--border-radius-sm);
     border: 1px solid var(--border-glass);
     /* 讓出寬度給頁首右側的按鈕列，否則會擠掉登出鈕。920px ≈ 左側 logo（221）＋右側按鈕列（553）
-       ＋頁首內距（48）＋左右各約 20px 留白；右側再加東西就要跟著調大（見 agents.md〈UI/UX 設計〉） */
+       ＋頁首內距（48）＋左右各約 20px 留白；右側再加東西就要跟著調大（見 AGENTS.md〈UI/UX 設計〉） */
     max-width: 40vw;
     max-width: clamp(160px, calc(100vw - 920px), 40vw);
     overflow-x: auto;
